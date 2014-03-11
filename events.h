@@ -19,6 +19,12 @@ enum Event_Type {
     PITCH_BEND = 0x0E,
     META = 0xFF
 };
+static inline int parameters_used (uint8 t) {
+    if (t == PROGRAM_CHANGE || t == CHANNEL_AFTERTOUCH)
+        return 1;
+    else
+        return 2;
+};
 
 typedef struct Channel_Event {
     uint8 type;  // One of 0x08..0x0E
