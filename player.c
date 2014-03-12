@@ -47,6 +47,12 @@ void link_voice (Voice* v, Voice_List* l) {
 
 #define MAX_VOICES 64
 
+typedef struct Channel {
+     // TODO: a lot more controllers
+    uint8 volume;
+    uint8 expression;
+} Channel;
+
 struct Player {
      // Voice management
     Voice_List active;
@@ -60,6 +66,7 @@ struct Player {
     uint32 samples_to_tick;
     uint32 ticks_to_event;
     int done;
+    Channel channels [16];
 };
 
 Player* new_player () {
@@ -84,6 +91,10 @@ void play_midi (Player* player, Midi* m) {
     player->samples_to_tick = player->tick_length;
     player->ticks_to_event = m->events[0].time;
     player->done = 0;
+    for (uint8 i = 0; i < 16; i++) {
+        player->channels[i].volume = 127;
+        player->channels[i].expression = 127;
+    }
 }
 
 void do_event (Player* player, Event* event) {
@@ -117,6 +128,19 @@ void do_event (Player* player, Event* event) {
                 v->channel = ce->channel;
                 v->note = ce->param1;
                 v->velocity = ce->param2;
+            }
+            break;
+        }
+        case CONTROLLER: {
+            switch (ce->param1) {
+                case VOLUME:
+                    player->channels[ce->channel].volume = ce->param2;
+                    break;
+                case EXPRESSION:
+                    player->channels[ce->channel].expression = ce->param2;
+                    break;
+                default:
+                    break;
             }
             break;
         }
@@ -162,7 +186,8 @@ void get_audio (Player* player, uint8* buf_, int len) {
         int32 val = 0;
         for (Voice* v = player->active.first; v != (Voice*)&player->active; v = v->next) {
             uint32 wl = wavelengths[v->note];
-            val += v->phase < wl / 2 ? -v->velocity : v->velocity;
+            Channel* ch = &player->channels[v->channel];
+            val += (v->phase < wl / 2 ? -v->velocity : v->velocity) * ch->volume * ch->expression / (32*127);
             v->phase += 1;
             v->phase %= wl;
         }

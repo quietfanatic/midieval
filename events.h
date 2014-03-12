@@ -24,6 +24,20 @@ enum Event_Type {
 enum Meta_Type {
     SET_TEMPO = 0x51
 };
+enum Controller {
+    BANK_SELECT = 1,
+    MODULATION = 2,
+    DATA_ENTRY_MSB = 6,
+    VOLUME = 7,
+    BALANCE = 8,
+    PAN = 10,
+    EXPRESSION = 11,
+    DATA_ENTRY_LSB = 38,
+    NRPN_LSB = 98,
+    NRPN_MSB = 99,
+    RPN_LSB = 100,
+    RPN_MSB = 101
+};
 
 static inline int parameters_used (uint8 t) {
     if (t == PROGRAM_CHANGE || t == CHANNEL_AFTERTOUCH)
