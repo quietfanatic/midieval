@@ -26,7 +26,7 @@ int main (int argc, char** argv) {
     }
     Patch* pat = load_patch("/usr/local/share/eawpats/harp.pat");
     print_patch(pat);
-    free_patch(pat);
+    set_patch(player, pat);
     Sequence* seq = argc == 2
         ? load_midi(argv[1])
         : load_midi("test.mid");
@@ -36,6 +36,7 @@ int main (int argc, char** argv) {
     SDL_PauseAudioDevice(dev, 1);
     free_player(player);
     free_sequence(seq);
+    free_patch(pat);
     SDL_Quit();
     return 0;
 }
