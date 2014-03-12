@@ -1,7 +1,7 @@
 #include "player.h"
 #include "midi.h"
 
-#define SAMPLING_RATE 48000
+#define SAMPLE_RATE 48000
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +13,7 @@ void init_wavelengths () {
     if (!initted) {
         initted = 1;
         for (uint8 i = 0; i < 128; i++) {
-            wavelengths[i] = SAMPLING_RATE / (440 * pow(2.0, (i - 69) / 12.0));
+            wavelengths[i] = SAMPLE_RATE / (440 * pow(2.0, (i - 69) / 12.0));
         }
     }
 }
@@ -54,8 +54,7 @@ struct Player {
     Voice voices [MAX_VOICES];
      // Specification
     uint32 tick_length;
-    uint32 n_events;
-    Timed_Event* events;
+    Midi* midi;
      // State
     Timed_Event* current;
     uint32 samples_to_tick;
@@ -79,18 +78,17 @@ void free_player (Player* player) {
 
 void play_midi (Player* player, Midi* m) {
      // Default tempo is 120bpm
-    player->tick_length = SAMPLING_RATE / m->tpb / 2;
-    player->n_events = m->n_events;
-    player->events = m->events;
+    player->tick_length = SAMPLE_RATE / m->tpb / 2;
+    player->midi = m;
     player->current = m->events;
     player->samples_to_tick = player->tick_length;
-    player->ticks_to_event = player->events[0].delta;
+    player->ticks_to_event = m->events[0].delta;
     player->done = 0;
 }
 
 void do_event (Player* player, Event* event) {
     print_event(event);
-//    Meta_Event* me = &event->meta_event;
+    Meta_Event* me = &event->meta_event;
     Channel_Event* ce = &event->channel_event;
     switch (event->type) {
         case NOTE_OFF: {
@@ -123,15 +121,22 @@ void do_event (Player* player, Event* event) {
             }
             break;
         }
+        case META: {
+            if (me->meta_type == SET_TEMPO) {
+                uint32 ms_per_beat = me->data[0] << 16 | me->data[1] << 8 | me->data[0];
+                player->tick_length = (uint64)SAMPLE_RATE * ms_per_beat / 1000000 / player->midi->tpb;
+            }
+        }
         default:
             break;
     }
 }
 
 void get_audio (Player* player, uint8* buf_, int len) {
+    Midi* midi = player->midi;
     int16* buf = (int16*)buf_;
     len /= 2;  // Assuming always an even number
-    if (player->done) {
+    if (!midi || player->done) {
         for (int i = 0; i < len; i++) {
             buf[i] = 0;
         }
@@ -140,11 +145,10 @@ void get_audio (Player* player, uint8* buf_, int len) {
     for (int i = 0; i < len; i++) {
          // Advance event timeline
         if (!--player->samples_to_tick) {
-            player->samples_to_tick = player->tick_length;
             while (!player->ticks_to_event) {
                 do_event(player, &player->current->event);
                 player->current += 1;
-                if (player->current == player->events + player->n_events) {
+                if (player->current == midi->events + midi->n_events) {
                     player->done = 1;
                 }
                 else {
@@ -152,6 +156,7 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 }
             }
             --player->ticks_to_event;
+            player->samples_to_tick = player->tick_length;
         }
          // Now mix voices
         int32 val = 0;
