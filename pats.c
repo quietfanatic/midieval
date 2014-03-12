@@ -152,10 +152,7 @@ Pat* load_pat (const char* filename) {
                 *(uint16*)(pat->samples[i].data + j) ^= 0x8000;
             }
         }
-        if (sampling_modes & LOOPING) {
-            printf("looping (?) samples NYI\n");
-            goto fail;
-        }
+        pat->samples[i].loop = !!(sampling_modes & LOOPING);
         if (sampling_modes & PINGPONG) {
             printf("ping-pong samples NYI\n");
             goto fail;
