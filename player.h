@@ -6,6 +6,7 @@
 typedef struct Player Player;
 
 Player* new_player ();
+void reset_player (Player*);
 void free_player (Player*);
 
 void play_sequence (Player*, Sequence*);

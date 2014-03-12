@@ -19,33 +19,12 @@ void init_wavelengths () {
 }
 
 typedef struct Voice {
-    struct Voice* prev;
-    struct Voice* next;
-    uint32 phase;
+    uint8 next;
     uint8 note;
     uint8 channel;
     uint8 velocity;
+    uint32 phase;
 } Voice;
-typedef struct Voice_List {
-    Voice* last;
-    Voice* first;
-} Voice_List;
-void init_voice_list (Voice_List* l) {
-    l->last = (Voice*)l;
-    l->first = (Voice*)l;
-}
-void unlink_voice (Voice* v) {
-    v->next->prev = v->prev;
-    v->prev->next = v->next;
-}
-void link_voice (Voice* v, Voice_List* l) {
-    v->next = (Voice*)l;
-    v->prev = l->last;
-    l->last->next = v;
-    l->last = v;
-}
-
-#define MAX_VOICES 64
 
 typedef struct Channel {
      // TODO: a lot more controllers
@@ -54,10 +33,6 @@ typedef struct Channel {
 } Channel;
 
 struct Player {
-     // Voice management
-    Voice_List active;
-    Voice_List inactive;
-    Voice voices [MAX_VOICES];
      // Specification
     uint32 tick_length;
     Sequence* seq;
@@ -67,16 +42,27 @@ struct Player {
     uint32 ticks_to_event;
     int done;
     Channel channels [16];
+    uint8 active;
+    uint8 inactive;
+    Voice voices [255];
 };
 
-Player* new_player () {
-    Player* player = (Player*)malloc(sizeof(Player));
-    init_voice_list(&player->active);
-    init_voice_list(&player->inactive);
-    init_wavelengths();
-    for (size_t i = 0; i < MAX_VOICES; i++) {
-        link_voice(&player->voices[i], &player->inactive);
+void reset_player (Player* p) {
+    for (uint32 i = 0; i < 16; i++) {
+        p->channels[i].volume = 127;
+        p->channels[i].expression = 127;
     }
+    p->active = 255;
+    p->inactive = 0;
+    for (uint32 i = 0; i < 255; i++) {
+        p->voices[i].next = i + 1;
+    }
+}
+
+Player* new_player () {
+    init_wavelengths();
+    Player* player = (Player*)malloc(sizeof(Player));
+    reset_player(player);
     return player;
 }
 void free_player (Player* player) {
@@ -91,38 +77,43 @@ void play_sequence (Player* player, Sequence* seq) {
     player->samples_to_tick = player->tick_length;
     player->ticks_to_event = seq->events[0].time;
     player->done = 0;
-    for (uint8 i = 0; i < 16; i++) {
-        player->channels[i].volume = 127;
-        player->channels[i].expression = 127;
-    }
 }
 
 void do_event (Player* player, Event* event) {
     switch (event->type) {
         case NOTE_OFF: {
-            Voice* next_v;
-            for (Voice* v = player->active.first; v != (Voice*)&player->active; v = next_v) {
-                next_v = v->next;
+            uint8* np = &player->active;
+            while (*np != 255) {
+                Voice* v = &player->voices[*np];
                 if (v->channel == event->channel && v->note == event->param1) {
-                    unlink_voice(v);
-                    link_voice(v, &player->inactive);
+                    *np = v->next;
+                    v->next = player->inactive;
+                    player->inactive = player->voices - v;
+                }
+                else {
+                    np = &v->next;
                 }
             }
             break;
         }
         case NOTE_ON: {
-            Voice* next_v;
-            for (Voice* v = player->active.first; v != (Voice*)&player->active; v = next_v) {
-                next_v = v->next;
+            uint8* np = &player->active;
+            while (*np != 255) {
+                Voice* v = &player->voices[*np];
                 if (v->channel == event->channel && v->note == event->param1) {
-                    unlink_voice(v);
-                    link_voice(v, &player->inactive);
+                    *np = v->next;
+                    v->next = player->inactive;
+                    player->inactive = player->voices - v;
+                }
+                else {
+                    np = &v->next;
                 }
             }
-            if (event->param2 && player->inactive.first != (Voice*)&player->inactive) {
-                Voice* v = player->inactive.first;
-                unlink_voice(v);
-                link_voice(v, &player->active);
+            if (event->param2 && player->inactive != 255) {
+                Voice* v = &player->voices[player->inactive];
+                player->inactive = v->next;
+                v->next = player->active;
+                player->active = player->voices - v;
                 v->channel = event->channel;
                 v->note = event->param1;
                 v->velocity = event->param2;
@@ -180,7 +171,8 @@ void get_audio (Player* player, uint8* buf_, int len) {
         }
          // Now mix voices
         int32 val = 0;
-        for (Voice* v = player->active.first; v != (Voice*)&player->active; v = v->next) {
+        for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
+            Voice* v = &player->voices[i];
             uint32 wl = wavelengths[v->note];
             Channel* ch = &player->channels[v->channel];
             val += (v->phase < wl / 2 ? -v->velocity : v->velocity) * ch->volume * ch->expression / (32*127);
