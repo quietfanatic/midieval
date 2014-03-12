@@ -17,7 +17,7 @@ enum Event_Type {
     PROGRAM_CHANGE = 0x0C,
     CHANNEL_AFTERTOUCH = 0x0D,
     PITCH_BEND = 0x0E,
-    META = 0xFF
+    META = 0x0F
 };
 static inline int parameters_used (uint8 t) {
     if (t == PROGRAM_CHANGE || t == CHANNEL_AFTERTOUCH)

@@ -31,7 +31,7 @@ void read_event (uint8** p, uint8* end, Timed_Event* event, uint8* status) {
     uint8 byte = *(*p)++;
     if (byte == 0xff) {
         Meta_Event* me = &event->event.meta_event;
-        me->type = 0xff;
+        me->type = 0x0f;
         if (end - *p < 1) {
             fprintf(stderr, "Premature end of track during meta event header\n");
         }
@@ -43,6 +43,17 @@ void read_event (uint8** p, uint8* end, Timed_Event* event, uint8* status) {
         }
         me->data = *p;
         *p += me->data_size;
+    }
+    else if ((byte & 0xf0) == 0xf0) {
+         // Ignore SYSEX events
+         // TODO: this'll break if a SYSEX event is last in the track.
+        uint32 size = read_var(p, end);
+        if (end - *p < size) {
+            fprintf(stderr, "Premature end of track during SYSEX event sized 0x%x\n", size);
+            exit(1);
+        }
+        *p += size;
+        return read_event(p, end, event, status);
     }
     else {
         Channel_Event* ce = &event->event.channel_event;
@@ -57,7 +68,7 @@ void read_event (uint8** p, uint8* end, Timed_Event* event, uint8* status) {
             ce->channel = *status & 0x0f;
             ce->param1 = byte;
         }
-        if (end - *p < 2) {
+        if (end - *p < parameters_used(ce->type)) {
             fprintf(stderr, "Premature end of track during channel event.\n");
             exit(1);
         }
