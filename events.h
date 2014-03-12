@@ -51,4 +51,6 @@ typedef struct Timed_Event {
     Event event;
 } Timed_Event;
 
+void print_event (Event*);
+
 #endif

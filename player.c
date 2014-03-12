@@ -89,6 +89,7 @@ void play_midi (Player* player, Midi* m) {
 }
 
 void do_event (Player* player, Event* event) {
+    print_event(event);
 //    Meta_Event* me = &event->meta_event;
     Channel_Event* ce = &event->channel_event;
     switch (event->type) {
