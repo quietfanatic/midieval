@@ -36,6 +36,8 @@ struct Player {
      // Specification
     uint32 tick_length;
     Sequence* seq;
+     // TODO: have more than one of these :)
+    Patch* patch;
      // State
     Timed_Event* current;
     uint32 samples_to_tick;
@@ -63,6 +65,7 @@ Player* new_player () {
     init_wavelengths();
     Player* player = (Player*)malloc(sizeof(Player));
     reset_player(player);
+    player->patch = NULL;
     return player;
 }
 void free_player (Player* player) {
@@ -77,6 +80,9 @@ void play_sequence (Player* player, Sequence* seq) {
     player->samples_to_tick = player->tick_length;
     player->ticks_to_event = seq->events[0].time;
     player->done = 0;
+}
+void set_patch (Player* player, Patch* patch) {
+    player->patch = patch;
 }
 
 void do_event (Player* player, Event* event) {
