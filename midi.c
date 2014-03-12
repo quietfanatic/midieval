@@ -136,6 +136,7 @@ Sequence* load_midi (const char* filename) {
                             fprintf(stderr, "Tempo event was of incorrect size\n");
                             goto fail;
                         }
+                        ev->type = SET_TEMPO;
                         ev->channel = p[0];
                         ev->param1 = p[1];
                         ev->param2 = p[2];
