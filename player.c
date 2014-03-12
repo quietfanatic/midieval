@@ -67,6 +67,7 @@ Player* new_player () {
     Player* player = (Player*)malloc(sizeof(Player));
     init_voice_list(&player->active);
     init_voice_list(&player->inactive);
+    init_wavelengths();
     for (size_t i = 0; i < MAX_VOICES; i++) {
         link_voice(&player->voices[i], &player->inactive);
     }
@@ -85,15 +86,11 @@ void play_midi (Player* player, Midi* m) {
     player->samples_to_tick = player->tick_length;
     player->ticks_to_event = player->events[0].delta;
     player->done = 0;
-    printf("Playing MIDI with %lu events; stt=%lu, tte=%lu\n",
-        m->n_events, player->samples_to_tick, player->ticks_to_event
-    );
 }
 
 void do_event (Player* player, Event* event) {
 //    Meta_Event* me = &event->meta_event;
     Channel_Event* ce = &event->channel_event;
-    printf("Doing event type %02hhx\n", event->type);
     switch (event->type) {
         case NOTE_OFF: {
             Voice* next_v;
@@ -107,7 +104,6 @@ void do_event (Player* player, Event* event) {
             break;
         }
         case NOTE_ON: {
-            printf("Note on: %02hhX %02hhX %02hhX\n", ce->channel, ce->param1, ce->param2);
             if (player->inactive.first != (Voice*)&player->inactive) {
                 Voice* v = player->inactive.first;
                 unlink_voice(v);
@@ -139,7 +135,12 @@ void get_audio (Player* player, uint8* buf_, int len) {
             while (!player->ticks_to_event) {
                 do_event(player, &player->current->event);
                 player->current += 1;
-                player->ticks_to_event = player->current->delta;
+                if (player->current == player->events + player->n_events) {
+                    player->done = 1;
+                }
+                else {
+                    player->ticks_to_event = player->current->delta;
+                }
             }
             --player->ticks_to_event;
         }

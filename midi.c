@@ -166,8 +166,9 @@ Midi* load_midi (const char* filename) {
      // Now fix the time delta cheat
     size_t time = 0;
     for (size_t i = 0; i < m->n_events; i++) {
+        uint32 new_time = m->events[i].delta;
         m->events[i].delta -= time;
-        time = m->events[i].delta;
+        time = new_time;
     }
 
     return m;
