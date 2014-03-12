@@ -26,7 +26,6 @@ int main (int argc, char** argv) {
     Sequence* seq = argc == 2
         ? load_midi(argv[1])
         : load_midi("test.mid");
-    print_sequence(seq);
     play_sequence(player, seq);
     SDL_PauseAudioDevice(dev, 0);
     fgetc(stdin);

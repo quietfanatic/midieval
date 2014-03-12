@@ -109,7 +109,6 @@ Sequence* load_midi (const char* filename) {
             time += delta;
             seq->events[seq->n_events].time = time;
             Event* ev = &seq->events[seq->n_events].event;
-            printf("%p\n", ev);
             if (end - p < 1) goto premature_end;
              // Optional type/channel byte
             uint8 byte = *p;
@@ -134,13 +133,12 @@ Sequence* load_midi (const char* filename) {
                      // Set Tempo
                     if (meta_type == 0x51) {
                         if (size != 3) {
-                            printf("Tempo event was of incorrect size\n");
+                            fprintf(stderr, "Tempo event was of incorrect size\n");
                             goto fail;
                         }
                         ev->channel = p[0];
                         ev->param1 = p[1];
                         ev->param2 = p[2];
-                        print_event(ev);
                         seq->n_events += 1;
                     }
                      // Otherwise ignore
@@ -161,7 +159,6 @@ Sequence* load_midi (const char* filename) {
                     ev->param2 = *p++;
                 else
                     ev->param2 = 0;
-                print_event(ev);
                 seq->n_events += 1;
             }
         }
@@ -175,7 +172,7 @@ Sequence* load_midi (const char* filename) {
 
     return seq;
   premature_end:
-    printf("Premature end of track while parsing event\n");
+    fprintf(stderr, "Premature end of track while parsing event\n");
   fail:
     free_sequence(seq);
     exit(1);
