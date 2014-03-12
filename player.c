@@ -7,13 +7,14 @@
 #include <stdlib.h>
 #include <math.h>
 
-uint32 wavelengths [128];
-void init_wavelengths () {
+ // In milliHz
+uint32 freqs [128];
+void init_freqs () {
     static int initted = 0;
     if (!initted) {
         initted = 1;
         for (uint8 i = 0; i < 128; i++) {
-            wavelengths[i] = SAMPLE_RATE / (440 * pow(2.0, (i - 69) / 12.0));
+            freqs[i] = 440000 * pow(2.0, (i - 69) / 12.0);
         }
     }
 }
@@ -23,7 +24,9 @@ typedef struct Voice {
     uint8 note;
     uint8 channel;
     uint8 velocity;
-    uint32 phase;
+    uint8 sample_index;
+     // 32:32 fixed point
+    uint64 sample_pos;
 } Voice;
 
 typedef struct Channel {
@@ -62,7 +65,7 @@ void reset_player (Player* p) {
 }
 
 Player* new_player () {
-    init_wavelengths();
+    init_freqs();
     Player* player = (Player*)malloc(sizeof(Player));
     reset_player(player);
     player->patch = NULL;
@@ -123,6 +126,8 @@ void do_event (Player* player, Event* event) {
                 v->channel = event->channel;
                 v->note = event->param1;
                 v->velocity = event->param2;
+                v->sample_index = 0;
+                v->sample_pos = 0;
             }
             break;
         }
@@ -178,12 +183,38 @@ void get_audio (Player* player, uint8* buf_, int len) {
          // Now mix voices
         int32 val = 0;
         for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
-            Voice* v = &player->voices[i];
-            uint32 wl = wavelengths[v->note];
-            Channel* ch = &player->channels[v->channel];
-            val += (v->phase < wl / 2 ? -v->velocity : v->velocity) * ch->volume * ch->expression / (32*127);
-            v->phase += 1;
-            v->phase %= wl;
+            if (player->patch) {
+                Voice* v = &player->voices[i];
+                Channel* ch = &player->channels[v->channel];
+                Sample* sample = &player->patch->samples[v->sample_index];
+                 // Loop
+                if (sample->loop) {
+                    if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
+                        v->sample_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
+                    }
+                }
+                else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
+                    continue;
+                }
+                 // Add value
+                int32 samp = sample->data[v->sample_pos];
+                val += samp * ch->volume * ch->expression / (32*127);
+                 // Move position
+                uint32 freq = freqs[v->note];
+                v->sample_pos += 0x100000000LL * sample->sample_rate / SAMPLE_RATE * sample->root_freq / freq;
+            }
+            else {
+                Voice* v = &player->voices[i];
+                Channel* ch = &player->channels[v->channel];
+                 // Loop
+                v->sample_pos %= 0x100000000LL;
+                 // Add value
+                int32 sign = v->sample_pos < 0x80000000LL ? -1 : 1;
+                val += sign * v->velocity * ch->volume * ch->expression / (32*127);
+                 // Move position
+                uint32 freq = freqs[v->note];
+                v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
+            }
         }
         buf[i] = val > 32767 ? 32767 : val < -32768 ? -32768 : val;
     }
