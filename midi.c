@@ -26,58 +26,6 @@ uint32 read_var (uint8** p, uint8* end) {
     } while (byte & 0x80);
     return r;
 }
-void read_event (uint8** p, uint8* end, Timed_Event* event, uint8* status) {
-    event->time = read_var(p, end);
-    uint8 byte = *(*p)++;
-    if (byte == 0xff) {
-        Meta_Event* me = &event->event.meta_event;
-        me->type = 0x0f;
-        if (end - *p < 1) {
-            fprintf(stderr, "Premature end of track during meta event header\n");
-        }
-        me->meta_type = *(*p)++;
-        me->data_size = read_var(p, end);
-        if (end - *p < me->data_size) {
-            fprintf(stderr, "Premature end of track during meta event sized 0x%x\n", me->data_size);
-            exit(1);
-        }
-        me->data = *p;
-        *p += me->data_size;
-    }
-    else if ((byte & 0xf0) == 0xf0) {
-         // Ignore SYSEX events
-         // TODO: this'll break if a SYSEX event is last in the track.
-        uint32 size = read_var(p, end);
-        if (end - *p < size) {
-            fprintf(stderr, "Premature end of track during SYSEX event sized 0x%x\n", size);
-            exit(1);
-        }
-        *p += size;
-        return read_event(p, end, event, status);
-    }
-    else {
-        Channel_Event* ce = &event->event.channel_event;
-        if (byte & 0x80) {
-            ce->type = byte >> 4;
-            ce->channel = byte & 0x0f;
-            ce->param1 = *(*p)++;
-            *status = byte;
-        }
-        else {
-            ce->type = *status >> 4;
-            ce->channel = *status & 0x0f;
-            ce->param1 = byte;
-        }
-        if (end - *p < parameters_used(ce->type)) {
-            fprintf(stderr, "Premature end of track during channel event.\n");
-            exit(1);
-        }
-        if (parameters_used(ce->type) == 2)
-            ce->param2 = *(*p)++;
-        else
-            ce->param2 = 0;
-    }
-}
 
 int cmp_event (const void* a_, const void* b_) {
     Timed_Event* a = (Timed_Event*)a_;
@@ -163,17 +111,69 @@ Midi* load_midi (const char* filename) {
                 max_events *= 2;
                 m->events = realloc(m->events, max_events * sizeof(Timed_Event));
             }
-            read_event(&p, end, &m->events[m->n_events], &status);
-             // Convert time from delta to absolute
-            time += m->events[m->n_events].time;
+            uint32 delta = read_var(&p, end);
+            time += delta;
             m->events[m->n_events].time = time;
-            m->n_events += 1;
+            Event* ev = &m->events[m->n_events].event;
+            if (end - p < 1) goto premature_end;
+            uint8 byte = *p;
+            if (byte & 0x80) {
+                ev->type = byte >> 4;
+                ev->channel = byte & 0x0f;
+                status = byte;
+                p++;
+            }
+            else {
+                ev->type = status >> 4;
+                ev->channel = status & 0x0f;
+            }
+             // Special event
+            if (ev->type == 0x0f) {
+                 // Meta event
+                if (ev->channel == 0x0f) {
+                    if (end - p < 1) goto premature_end;
+                    uint8 meta_type = *p++;
+                    uint32 size = read_var(&p, end);
+                    if (end - p < size) goto premature_end;
+                     // Set Tempo
+                    if (meta_type == 0x51) {
+                        if (size != 3) {
+                            printf("Tempo event was of incorrect size\n");
+                            goto fail;
+                        }
+                        ev->channel = p[0];
+                        ev->param1 = p[1];
+                        ev->param2 = p[2];
+                        m->n_events += 1;
+                    }
+                     // Otherwise ignore
+                    p += size;
+                }
+                 // Ignore SYSEX
+                else {
+                    uint32 size = read_var(&p, end);
+                    if (end - p < size) goto premature_end;
+                    p += size;
+                }
+            }
+             // Normal event
+            else {
+                if (end - p < parameters_used(ev->type)) goto premature_end;
+                ev->param1 = *p++;
+                if (parameters_used(ev->type) == 2)
+                    ev->param2 = *p++;
+                else
+                    ev->param2 = 0;
+                m->n_events += 1;
+            }
         }
     }
      // Now sort them by time
     qsort(m->events, m->n_events, sizeof(Timed_Event), cmp_event);
 
     return m;
+  premature_end:
+    printf("Premature end of track while parsing event\n");
   fail:
     free_midi(m);
     exit(1);

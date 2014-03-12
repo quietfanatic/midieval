@@ -19,10 +19,8 @@ enum Event_Type {
     PROGRAM_CHANGE = 0x0C,
     CHANNEL_AFTERTOUCH = 0x0D,
     PITCH_BEND = 0x0E,
-    META = 0x0F
-};
-enum Meta_Type {
-    SET_TEMPO = 0x51
+    META = 0x0F,
+    SET_TEMPO = 0x10
 };
 enum Controller {
     BANK_SELECT = 1,
@@ -46,24 +44,11 @@ static inline int parameters_used (uint8 t) {
         return 2;
 };
 
-typedef struct Channel_Event {
-    uint8 type;  // One of 0x08..0x0E
-    uint8 channel;
-    uint8 param1;  // Note number, controller number
-    uint8 param2;  // Note velocity, controller value
-} Channel_Event;
-
-typedef struct Meta_Event {
-    uint8 type;  // 0xFF
-    uint8 meta_type;
-    uint32 data_size;  // TODO: structure size optimization
-    uint8* data;
-} Meta_Event;
-
-typedef union Event {
+typedef struct Event {
     uint8 type;
-    Channel_Event channel_event;
-    Meta_Event meta_event;
+    uint8 channel;
+    uint8 param1;
+    uint8 param2;
 } Event;
 
 typedef struct Timed_Event {

@@ -98,14 +98,12 @@ void play_midi (Player* player, Midi* m) {
 }
 
 void do_event (Player* player, Event* event) {
-    Meta_Event* me = &event->meta_event;
-    Channel_Event* ce = &event->channel_event;
     switch (event->type) {
         case NOTE_OFF: {
             Voice* next_v;
             for (Voice* v = player->active.first; v != (Voice*)&player->active; v = next_v) {
                 next_v = v->next;
-                if (v->channel == ce->channel && v->note == ce->param1) {
+                if (v->channel == event->channel && v->note == event->param1) {
                     unlink_voice(v);
                     link_voice(v, &player->inactive);
                 }
@@ -116,39 +114,37 @@ void do_event (Player* player, Event* event) {
             Voice* next_v;
             for (Voice* v = player->active.first; v != (Voice*)&player->active; v = next_v) {
                 next_v = v->next;
-                if (v->channel == ce->channel && v->note == ce->param1) {
+                if (v->channel == event->channel && v->note == event->param1) {
                     unlink_voice(v);
                     link_voice(v, &player->inactive);
                 }
             }
-            if (ce->param2 && player->inactive.first != (Voice*)&player->inactive) {
+            if (event->param2 && player->inactive.first != (Voice*)&player->inactive) {
                 Voice* v = player->inactive.first;
                 unlink_voice(v);
                 link_voice(v, &player->active);
-                v->channel = ce->channel;
-                v->note = ce->param1;
-                v->velocity = ce->param2;
+                v->channel = event->channel;
+                v->note = event->param1;
+                v->velocity = event->param2;
             }
             break;
         }
         case CONTROLLER: {
-            switch (ce->param1) {
+            switch (event->param1) {
                 case VOLUME:
-                    player->channels[ce->channel].volume = ce->param2;
+                    player->channels[event->channel].volume = event->param2;
                     break;
                 case EXPRESSION:
-                    player->channels[ce->channel].expression = ce->param2;
+                    player->channels[event->channel].expression = event->param2;
                     break;
                 default:
                     break;
             }
             break;
         }
-        case META: {
-            if (me->meta_type == SET_TEMPO) {
-                uint32 ms_per_beat = me->data[0] << 16 | me->data[1] << 8 | me->data[0];
-                player->tick_length = (uint64)SAMPLE_RATE * ms_per_beat / 1000000 / player->midi->tpb;
-            }
+        case SET_TEMPO: {
+            uint32 ms_per_beat = event->channel << 16 | event->param1 << 8 | event->param2;
+            player->tick_length = (uint64)SAMPLE_RATE * ms_per_beat / 1000000 / player->midi->tpb;
         }
         default:
             break;
