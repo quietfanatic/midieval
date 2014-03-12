@@ -126,8 +126,17 @@ void do_event (Player* player, Event* event) {
                 v->channel = event->channel;
                 v->note = event->param1;
                 v->velocity = event->param2;
-                v->sample_index = 0;
                 v->sample_pos = 0;
+                v->sample_index = 0;
+                if (player->patch) {
+                    uint32 freq = freqs[v->note];
+                    for (uint8 i = 0; i < player->patch->n_samples; i++) {
+                        if (player->patch->samples[i].high_freq > freq) {
+                            v->sample_index = i;
+                            break;
+                        }
+                    }
+                }
             }
             break;
         }
