@@ -4,7 +4,7 @@
 #include "midi.h"
 #include "player.h"
 
-int main () {
+int main (int argc, char** argv) {
     if (SDL_Init(SDL_INIT_AUDIO) < 0) {
         printf("SDL_Init failed: %s\n", SDL_GetError());
     }
@@ -23,7 +23,9 @@ int main () {
     if (dev == 0) {
         printf("SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
     }
-    Midi* midi = load_midi("test.mid");
+    Midi* midi = argc == 2
+        ? load_midi(argv[1])
+        : load_midi("test.mid");
     debug_print_midi(midi);
     play_midi(player, midi);
     SDL_PauseAudioDevice(dev, 0);
