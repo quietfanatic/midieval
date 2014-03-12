@@ -1,7 +1,7 @@
 #include "player.h"
 #include "midi.h"
 
-#define SAMPLING_RATE 44100
+#define SAMPLING_RATE 48000
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -105,6 +105,14 @@ void do_event (Player* player, Event* event) {
             break;
         }
         case NOTE_ON: {
+            Voice* next_v;
+            for (Voice* v = player->active.first; v != (Voice*)&player->active; v = next_v) {
+                next_v = v->next;
+                if (v->channel == ce->channel && v->note == ce->param1) {
+                    unlink_voice(v);
+                    link_voice(v, &player->inactive);
+                }
+            }
             if (player->inactive.first != (Voice*)&player->inactive) {
                 Voice* v = player->inactive.first;
                 unlink_voice(v);
