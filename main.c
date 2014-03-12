@@ -3,6 +3,7 @@
 #include <SDL2/SDL_audio.h>
 #include "midi.h"
 #include "player.h"
+#include "pats.h"
 
 int main (int argc, char** argv) {
     if (SDL_Init(SDL_INIT_AUDIO) < 0) {
@@ -23,6 +24,9 @@ int main (int argc, char** argv) {
     if (dev == 0) {
         printf("SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
     }
+    Pat* pat = load_pat("/usr/local/share/eawpats/harp.pat");
+    print_pat(pat);
+    free_pat(pat);
     Sequence* seq = argc == 2
         ? load_midi(argv[1])
         : load_midi("test.mid");
