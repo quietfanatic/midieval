@@ -60,7 +60,7 @@ struct Player {
     Voice voices [MAX_VOICES];
      // Specification
     uint32 tick_length;
-    Midi* midi;
+    Sequence* seq;
      // State
     Timed_Event* current;
     uint32 samples_to_tick;
@@ -83,13 +83,13 @@ void free_player (Player* player) {
     free(player);
 }
 
-void play_midi (Player* player, Midi* m) {
+void play_sequence (Player* player, Sequence* seq) {
      // Default tempo is 120bpm
-    player->tick_length = SAMPLE_RATE / m->tpb / 2;
-    player->midi = m;
-    player->current = m->events;
+    player->tick_length = SAMPLE_RATE / seq->tpb / 2;
+    player->seq = seq;
+    player->current = seq->events;
     player->samples_to_tick = player->tick_length;
-    player->ticks_to_event = m->events[0].time;
+    player->ticks_to_event = seq->events[0].time;
     player->done = 0;
     for (uint8 i = 0; i < 16; i++) {
         player->channels[i].volume = 127;
@@ -144,7 +144,7 @@ void do_event (Player* player, Event* event) {
         }
         case SET_TEMPO: {
             uint32 ms_per_beat = event->channel << 16 | event->param1 << 8 | event->param2;
-            player->tick_length = (uint64)SAMPLE_RATE * ms_per_beat / 1000000 / player->midi->tpb;
+            player->tick_length = (uint64)SAMPLE_RATE * ms_per_beat / 1000000 / player->seq->tpb;
         }
         default:
             break;
@@ -152,10 +152,10 @@ void do_event (Player* player, Event* event) {
 }
 
 void get_audio (Player* player, uint8* buf_, int len) {
-    Midi* midi = player->midi;
+    Sequence* seq = player->seq;
     int16* buf = (int16*)buf_;
     len /= 2;  // Assuming always an even number
-    if (!midi || player->done) {
+    if (!seq || player->done) {
         for (int i = 0; i < len; i++) {
             buf[i] = 0;
         }
@@ -168,7 +168,7 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 do_event(player, &player->current->event);
                 uint32 old_time = player->current->time;
                 player->current += 1;
-                if (player->current == midi->events + midi->n_events) {
+                if (player->current == seq->events + seq->n_events) {
                     player->done = 1;
                 }
                 else {

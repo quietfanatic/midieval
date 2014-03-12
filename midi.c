@@ -33,7 +33,7 @@ int cmp_event (const void* a_, const void* b_) {
     return (a->time > b->time) - (a->time < b->time);
 }
 
-Midi* load_midi (const char* filename) {
+Sequence* load_midi (const char* filename) {
     FILE* f = fopen(filename, "r");
     if (!f) {
         fprintf(stderr, "Failed to open %s for reading: %s\n", filename, strerror(errno));
@@ -43,6 +43,8 @@ Midi* load_midi (const char* filename) {
     size_t size = ftell(f);
     fseek(f, 0, SEEK_SET);
     uint8* data = (uint8*)malloc(size);
+    uint8* file_end = data + size;
+    uint8* p = data;
     if (fread(data, 1, size, f) != size) {
         fprintf(stderr, "Failed to read from %s: %s\n", filename, strerror(errno));
         exit(1);
@@ -51,71 +53,65 @@ Midi* load_midi (const char* filename) {
         fprintf(stderr, "Failed to close %s: %s\n", filename, strerror(errno));
         exit(1);
     }
-    Midi* m = malloc(sizeof(Midi));
-    m->tracks = NULL;
-    m->data_size = size;
-    m->data = data;
-    m->events = NULL;
     if (size < 22) {
         fprintf(stderr, "This file is not nearly long enough to be a MIDI file! (%lu)\n", size);
-        goto fail;
+        exit(1);
     }
-    uint32 magic = read_u32(data);
+    uint32 magic = read_u32(p);
+    p += 4;
     if (magic != read_u32((uint8*)"MThd")) {
         fprintf(stderr, "This file is not a MIDI file (Magic number = %08lx).\n", (unsigned long)magic);
-        goto fail;
+        exit(1);
     }
-    m->n_tracks = read_u16(data + 10);
-    m->tpb = read_u16(data + 12);
-    if (m->tpb & 0x8000) {
+    p += 6;  // Skipping some stuff we don't care about
+    uint16 n_tracks = read_u16(p);
+    p += 2;
+    uint16 tpb = read_u16(p);
+    p += 2;
+    if (tpb & 0x8000) {
         fprintf(stderr, "This program cannot recognize SMTPE-format time divisions.\n");
-        goto fail;
+        exit(1);
     }
-    m->tracks = (Track*)malloc(m->n_tracks * sizeof(Track));
-    size_t pos = 14;
-    for (size_t i = 0; i < m->n_tracks; i++) {
-        if (size - pos < 8) {
-            fprintf(stderr, "Premature end of file during chunk header %lu.\n", i);
+    Sequence* seq = malloc(sizeof(Sequence));
+    seq->tpb = tpb;
+    size_t max_events = 256;
+    seq->events = malloc(max_events * sizeof(Timed_Event));
+    seq->n_events = 0;
+
+    for (uint16 i = 0; i < n_tracks; i++) {
+         // Verify track header
+        if (file_end - p < 8) {
+            fprintf(stderr, "Premature end of file during chunk header %hu of %hu.\n", i, n_tracks);
             goto fail;
         }
-        uint32 chunk_id = read_u32(data + pos);
+        uint32 chunk_id = read_u32(p);
+        p += 4;
         if (chunk_id != read_u32((uint8*)"MTrk")) {
             fprintf(stderr, "Wrong chunk ID %08lx).\n", (unsigned long)chunk_id);
             goto fail;
         }
-        uint32 chunk_size = read_u32(data + pos + 4);
-        pos += 8;
-        if (size - pos < chunk_size) {
-            fprintf(stderr, "Premature end of file during track %lu.\n", i);
+        uint32 chunk_size = read_u32(p);
+        p += 4;
+        if (file_end - p < chunk_size) {
+            fprintf(stderr, "Premature end of file during track %hu.\n", i);
             goto fail;
         }
-        m->tracks[i].data_size = chunk_size;
-        m->tracks[i].data = data + pos;
-        pos += chunk_size;
-    }
-    if (pos != size) {
-        fprintf(stderr, "Warning: extra junk at end of MIDI file.\n");
-    }
-     // Read all events into an array
-    size_t max_events = 256;
-    m->events = malloc(max_events * sizeof(Timed_Event));
-    m->n_events = 0;
-
-    for (size_t i = 0; i < m->n_tracks; i++) {
-        uint8* p = m->tracks[i].data;
-        uint8* end = p + m->tracks[i].data_size;
+         // Load track's events
+        uint8* end = p + chunk_size;
         uint32 time = 0;
         uint8 status = 0x80;  // Doesn't really matter
         while (p != end) {
-            if (m->n_events >= max_events) {
+            if (seq->n_events >= max_events) {
                 max_events *= 2;
-                m->events = realloc(m->events, max_events * sizeof(Timed_Event));
+                seq->events = realloc(seq->events, max_events * sizeof(Timed_Event));
             }
             uint32 delta = read_var(&p, end);
             time += delta;
-            m->events[m->n_events].time = time;
-            Event* ev = &m->events[m->n_events].event;
+            seq->events[seq->n_events].time = time;
+            Event* ev = &seq->events[seq->n_events].event;
+            printf("%p\n", ev);
             if (end - p < 1) goto premature_end;
+             // Optional type/channel byte
             uint8 byte = *p;
             if (byte & 0x80) {
                 ev->type = byte >> 4;
@@ -144,7 +140,8 @@ Midi* load_midi (const char* filename) {
                         ev->channel = p[0];
                         ev->param1 = p[1];
                         ev->param2 = p[2];
-                        m->n_events += 1;
+                        print_event(ev);
+                        seq->n_events += 1;
                     }
                      // Otherwise ignore
                     p += size;
@@ -164,37 +161,23 @@ Midi* load_midi (const char* filename) {
                     ev->param2 = *p++;
                 else
                     ev->param2 = 0;
-                m->n_events += 1;
+                print_event(ev);
+                seq->n_events += 1;
             }
         }
     }
-     // Now sort them by time
-    qsort(m->events, m->n_events, sizeof(Timed_Event), cmp_event);
+    if (p != file_end) {
+        fprintf(stderr, "Warning: extra junk at end of MIDI file.\n");
+    }
 
-    return m;
+     // Now sort the events by time
+    qsort(seq->events, seq->n_events, sizeof(Timed_Event), cmp_event);
+
+    return seq;
   premature_end:
     printf("Premature end of track while parsing event\n");
   fail:
-    free_midi(m);
+    free_sequence(seq);
     exit(1);
 }
 
-void free_midi (Midi* m) {
-    if (m->tracks)
-        free(m->tracks);
-    free(m->data);
-    if (m->events)
-        free(m->events);
-    free(m);
-}
-
-void debug_print_midi (Midi* m) {
-    printf("%lu\n", (unsigned long)m->n_tracks);
-    for (size_t i = 0; i < m->n_tracks; i++) {
-        printf("%lu: %lu\n", i, m->tracks[i].data_size);
-    }
-    for (size_t i = 0; i < m->n_events; i++) {
-        printf("%08X ", m->events[i].time);
-        print_event(&m->events[i].event);
-    }
-}

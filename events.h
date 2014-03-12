@@ -56,6 +56,15 @@ typedef struct Timed_Event {
     Event event;
 } Timed_Event;
 
+typedef struct Sequence {
+    uint32 tpb;
+    uint32 n_events;
+    Timed_Event* events;
+} Sequence;
+
+void free_sequence (Sequence*);
+
 void print_event (Event*);
+void print_sequence (Sequence*);
 
 #endif
