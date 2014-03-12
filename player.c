@@ -205,9 +205,10 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
                     continue;
                 }
-                 // Add value  TODO: interpolation
-                int32 samp = sample->data[v->sample_pos / 0x100000000LL];
-                val += samp * player->patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127;
+                 // Add value  TODO: this may break right before the end
+                int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
+                samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
+                val += samp / 0x100000000LL * player->patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127;
                  // Move position
                 uint32 freq = freqs[v->note];
                 v->sample_pos += 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
