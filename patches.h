@@ -6,11 +6,14 @@
 typedef uint8_t uint8;
 typedef uint16_t uint16;
 typedef uint32_t uint32;
+typedef int16_t int16;
 
 typedef struct Sample {
+     // in milliHz
     uint32 low_freq;
     uint32 high_freq;
     uint32 root_freq;
+     // in samples
     uint32 loop_start;
     uint32 loop_end;
     uint8 envelope_rates [6];
@@ -19,7 +22,7 @@ typedef struct Sample {
     uint8 loop;
     uint16 sample_rate;
     uint32 data_size;
-    uint8* data;
+    int16* data;
 } Sample;
 
 typedef struct Patch {

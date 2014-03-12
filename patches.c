@@ -125,7 +125,9 @@ Patch* load_patch (const char* filename) {
         }
         pat->samples[i].data_size = read_u32(f);
         pat->samples[i].loop_start = read_u32(f);
+        pat->samples[i].loop_start /= 2;
         pat->samples[i].loop_end = read_u32(f);
+        pat->samples[i].loop_end /= 2;
         pat->samples[i].sample_rate = read_u16(f);
         pat->samples[i].low_freq = read_u32(f);
         pat->samples[i].high_freq = read_u32(f);
@@ -142,14 +144,14 @@ Patch* load_patch (const char* filename) {
         uint8 sampling_modes = read_u8(f);
         skip(f, 4);  // Scale(?) stuff
         skip(f, 36);  // Reserved
-        pat->samples[i].data = read_size(f, pat->samples[i].data_size);
+        pat->samples[i].data = (int16*)read_size(f, pat->samples[i].data_size);
         if (!(sampling_modes & BITS16)) {
             printf("8-bit samples NYI\n");
             goto fail;
         }
         if (sampling_modes & UNSIGNED) {
             for (uint32 j = 0; j < pat->samples[i].data_size; j += 2) {
-                *(uint16*)(pat->samples[i].data + j) ^= 0x8000;
+                pat->samples[i].data[j] ^= 0x8000;
             }
         }
         pat->samples[i].loop = !!(sampling_modes & LOOPING);
