@@ -88,7 +88,7 @@ void do_event (Player* player, Event* event) {
                 if (v->channel == event->channel && v->note == event->param1) {
                     *np = v->next;
                     v->next = player->inactive;
-                    player->inactive = player->voices - v;
+                    player->inactive = v - player->voices;
                 }
                 else {
                     np = &v->next;
@@ -103,7 +103,7 @@ void do_event (Player* player, Event* event) {
                 if (v->channel == event->channel && v->note == event->param1) {
                     *np = v->next;
                     v->next = player->inactive;
-                    player->inactive = player->voices - v;
+                    player->inactive = v - player->voices;
                 }
                 else {
                     np = &v->next;
@@ -113,7 +113,7 @@ void do_event (Player* player, Event* event) {
                 Voice* v = &player->voices[player->inactive];
                 player->inactive = v->next;
                 v->next = player->active;
-                player->active = player->voices - v;
+                player->active = v - player->voices;
                 v->channel = event->channel;
                 v->note = event->param1;
                 v->velocity = event->param2;
