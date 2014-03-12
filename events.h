@@ -53,7 +53,7 @@ typedef union Event {
 } Event;
 
 typedef struct Timed_Event {
-    uint32 delta;
+    uint32 time;  // In ticks
     Event event;
 } Timed_Event;
 

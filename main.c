@@ -26,7 +26,6 @@ int main (int argc, char** argv) {
     Midi* midi = argc == 2
         ? load_midi(argv[1])
         : load_midi("test.mid");
-    debug_print_midi(midi);
     play_midi(player, midi);
     SDL_PauseAudioDevice(dev, 0);
     fgetc(stdin);

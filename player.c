@@ -82,12 +82,11 @@ void play_midi (Player* player, Midi* m) {
     player->midi = m;
     player->current = m->events;
     player->samples_to_tick = player->tick_length;
-    player->ticks_to_event = m->events[0].delta;
+    player->ticks_to_event = m->events[0].time;
     player->done = 0;
 }
 
 void do_event (Player* player, Event* event) {
-    print_event(event);
     Meta_Event* me = &event->meta_event;
     Channel_Event* ce = &event->channel_event;
     switch (event->type) {
@@ -111,7 +110,7 @@ void do_event (Player* player, Event* event) {
                     link_voice(v, &player->inactive);
                 }
             }
-            if (player->inactive.first != (Voice*)&player->inactive) {
+            if (ce->param2 && player->inactive.first != (Voice*)&player->inactive) {
                 Voice* v = player->inactive.first;
                 unlink_voice(v);
                 link_voice(v, &player->active);
@@ -147,12 +146,13 @@ void get_audio (Player* player, uint8* buf_, int len) {
         if (!--player->samples_to_tick) {
             while (!player->ticks_to_event) {
                 do_event(player, &player->current->event);
+                uint32 old_time = player->current->time;
                 player->current += 1;
                 if (player->current == midi->events + midi->n_events) {
                     player->done = 1;
                 }
                 else {
-                    player->ticks_to_event = player->current->delta;
+                    player->ticks_to_event = player->current->time - old_time;
                 }
             }
             --player->ticks_to_event;
