@@ -23,14 +23,14 @@ int main () {
     if (dev == 0) {
         printf("SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
     }
+    Midi* midi = load_midi("test.mid");
+    debug_print_midi(midi);
+    play_midi(player, midi);
     SDL_PauseAudioDevice(dev, 0);
-    Midi* m = load_midi("test.mid");
-    debug_print_midi(m);
-    add_voice(player, 300, 2000, 0);
     fgetc(stdin);
     SDL_PauseAudioDevice(dev, 1);
     free_player(player);
-    free_midi(m);
+    free_midi(midi);
     SDL_Quit();
     return 0;
 }

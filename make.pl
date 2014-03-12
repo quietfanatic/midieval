@@ -17,7 +17,7 @@ sub cc_rule {
 sub ld_rule {
     my ($to, $from) = @_;
     rule $to, $from, sub {
-        run 'gcc', @$from, qw(-lSDL2 -o), $to;
+        run 'gcc', @$from, qw(-lSDL2 -lm -o), $to;
     };
 }
 

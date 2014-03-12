@@ -6,32 +6,6 @@
 #include <string.h>
 #include "events.h"
 
- // MIDI Handling
-
-typedef struct Track {
-    size_t data_size;
-    uint8* data;
-} Track;
-
-typedef struct Midi {
-    uint16 tpb;
-    uint16 n_tracks;
-    Track* tracks;
-    size_t data_size;
-    uint8* data;
-    size_t n_events;
-    Timed_Event* events;
-} Midi;
-
-void free_midi (Midi* m) {
-    if (m->tracks)
-        free(m->tracks);
-    free(m->data);
-    if (m->events)
-        free(m->events);
-    free(m);
-}
-
 uint32 read_u32 (uint8* data) {
     return data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3];
 }
@@ -200,6 +174,15 @@ Midi* load_midi (const char* filename) {
   fail:
     free_midi(m);
     exit(1);
+}
+
+void free_midi (Midi* m) {
+    if (m->tracks)
+        free(m->tracks);
+    free(m->data);
+    if (m->events)
+        free(m->events);
+    free(m);
 }
 
 void debug_print_midi (Midi* m) {
