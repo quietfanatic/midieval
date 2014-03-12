@@ -1,3 +1,9 @@
 A MIDI player using SDL_audio.
 
-Not yet functional.
+TODO:
+ ☑ play notes
+ ☐ controllers
+ ☐ read soundfonts
+ ☐ use soundfonts
+ ☐ loops
+ ☐ run events in realtime
