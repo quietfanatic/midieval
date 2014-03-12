@@ -198,7 +198,7 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 }
                  // Add value  TODO: interpolation
                 int32 samp = sample->data[v->sample_pos / 0x100000000LL];
-                val += samp * v->velocity / 127 * ch->volume / 127 * ch->expression / 127;
+                val += samp * player->patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127;
                  // Move position
                 uint32 freq = freqs[v->note];
                 v->sample_pos += 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
