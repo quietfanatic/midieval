@@ -1,5 +1,5 @@
-#ifndef HAVE_MIDIVAL_PATS_H
-#define HAVE_MIDIVAL_PATS_H
+#ifndef HAVE_MIDIVAL_PATCHES_H
+#define HAVE_MIDIVAL_PATCHES_H
 
 #include <inttypes.h>
 
@@ -22,16 +22,16 @@ typedef struct Sample {
     uint8* data;
 } Sample;
 
-typedef struct Pat {
+typedef struct Patch {
      // TODO: do we need any more information?
     uint16 volume;
     uint8 n_samples;
     Sample* samples;
-} Pat;
+} Patch;
 
-Pat* load_pat (const char* filename);
-void free_pat (Pat*);
+Patch* load_patch (const char* filename);
+void free_patch (Patch*);
 
-void print_pat (Pat*);
+void print_patch (Patch*);
 
 #endif

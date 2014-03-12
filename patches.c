@@ -1,4 +1,4 @@
-#include "pats.h"
+#include "patches.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -69,7 +69,7 @@ static void require (FILE* f, uint32 size, const char* str) {
     }
 }
 
-Pat* load_pat (const char* filename) {
+Patch* load_patch (const char* filename) {
     FILE* f = fopen(filename, "r");
     if (!f) {
         printf("Couldn't open %s for reading: %s\n", filename, strerror(errno));
@@ -86,7 +86,7 @@ Pat* load_pat (const char* filename) {
     skip(f, 1);  // Voices?
     skip(f, 1);  // Channels?
     skip(f, 2);  // Waveforms?
-    Pat* pat = malloc(sizeof(Pat));
+    Patch* pat = malloc(sizeof(Patch));
     pat->samples = NULL;
     pat->volume = read_u16(f);
     skip(f, 4);  // Data size
@@ -167,11 +167,11 @@ Pat* load_pat (const char* filename) {
 
   fail:
     fclose(f);
-    free_pat(pat);
+    free_patch(pat);
     exit(1);
 }
 
-void free_pat (Pat* pat) {
+void free_patch (Patch* pat) {
     if (pat->samples) {
         for (uint32 i = 0; i < pat->n_samples; i++) {
             if (pat->samples[i].data)
@@ -182,8 +182,8 @@ void free_pat (Pat* pat) {
     free(pat);
 }
 
-void print_pat (Pat* pat) {
-    printf("Pat: {\n");
+void print_patch (Patch* pat) {
+    printf("Patch: {\n");
     printf("  volume: %hu\n", pat->volume);
     for (uint8 i = 0; i < pat->n_samples; i++) {
         printf("  Sample: {\n");
