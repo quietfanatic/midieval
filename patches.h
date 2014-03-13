@@ -17,8 +17,8 @@ typedef struct Sample {
      // in samples
     uint32 loop_start;
     uint32 loop_end;
-    uint8 envelope_rates [6];
-    uint8 envelope_offsets [6];
+    uint32 envelope_rates [6];
+    uint32 envelope_offsets [6];
     uint8 pan;
     uint8 loop;
     uint8 pingpong;

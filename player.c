@@ -26,6 +26,9 @@ typedef struct Voice {
     uint8 velocity;
     uint8 sample_index;
     uint8 backwards;
+    uint8 envelope_phase;
+     // 15:15 (?) fixed point
+    uint32 envelope_value;
      // 32:32 fixed point
     uint64 sample_pos;
 } Voice;
@@ -92,34 +95,20 @@ void set_bank (Player* player, Bank* bank) {
 void do_event (Player* player, Event* event) {
     switch (event->type) {
         case NOTE_OFF: {
-            uint8* np = &player->active;
-            while (*np != 255) {
-                Voice* v = &player->voices[*np];
+            do_note_off:  // Do all notes.  TODO: do only one note
+            for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
+                Voice* v = &player->voices[i];
                 if (v->channel == event->channel && v->note == event->param1) {
-                    *np = v->next;
-                    v->next = player->inactive;
-                    player->inactive = v - player->voices;
-                }
-                else {
-                    np = &v->next;
+                    if (v->envelope_phase < 3)
+                        v->envelope_phase = 3;
                 }
             }
             break;
         }
         case NOTE_ON: {
-            uint8* np = &player->active;
-            while (*np != 255) {
-                Voice* v = &player->voices[*np];
-                if (v->channel == event->channel && v->note == event->param1) {
-                    *np = v->next;
-                    v->next = player->inactive;
-                    player->inactive = v - player->voices;
-                }
-                else {
-                    np = &v->next;
-                }
-            }
-            if (event->param2 && player->inactive != 255) {
+            if (event->param2 == 0)
+                goto do_note_off;
+            if (player->inactive != 255) {
                 Voice* v = &player->voices[player->inactive];
                 player->inactive = v->next;
                 v->next = player->active;
@@ -130,6 +119,9 @@ void do_event (Player* player, Event* event) {
                 v->backwards = 0;
                 v->sample_pos = 0;
                 v->sample_index = 0;
+                v->envelope_phase = 0;
+                v->envelope_value = 0;
+                 // Decide which patch sample we're using
                 Channel* ch = &player->channels[v->channel];
                 if (player->bank) {
                     Patch* patch = v->channel == 9
@@ -216,8 +208,10 @@ void get_audio (Player* player, uint8* buf_, int len) {
         }
          // Now mix voices
         int32 val = 0;
-        for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
-            Voice* v = &player->voices[i];
+        uint8* next_ip;
+        for (uint8* ip = &player->active; *ip != 255; ip = next_ip) {
+            Voice* v = &player->voices[*ip];
+            next_ip = &v->next;
             Channel* ch = &player->channels[v->channel];
             if (player->bank) {
                 Patch* patch = v->channel == 9
@@ -226,6 +220,45 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 if (patch) {
                     Sample* sample = &patch->samples[v->sample_index];
                     uint32 freq = freqs[v->note];
+                     // Do envelopes  TODO: fade to 0 at end
+                    uint32 rate = sample->envelope_rates[v->envelope_phase];
+                    uint32 target = sample->envelope_offsets[v->envelope_phase];
+                    if (target > v->envelope_value) {
+                        if (v->envelope_value + rate < target) {
+                            v->envelope_value += rate;
+                        }
+                        else if (v->envelope_phase == 5) {
+                             // Delete voice
+                            next_ip = ip;
+                            *ip = v->next;
+                            v->next = player->inactive;
+                            player->inactive = v - player->voices;
+                            continue;
+                        }
+                        else {
+                            printf("Finished phase %hhu (%x %x)\n", v->envelope_phase, rate, target);
+                            v->envelope_value = target;
+                            v->envelope_phase += 1;
+                        }
+                    }
+                    else {
+                        if (target + rate < v->envelope_value) {
+                            v->envelope_value -= rate;
+                        }
+                        else if (v->envelope_phase == 5) {
+                             // Delete voice
+                            next_ip = ip;
+                            *ip = v->next;
+                            v->next = player->inactive;
+                            player->inactive = v - player->voices;
+                            continue;
+                        }
+                        else {
+                            printf("Finished phase %hhu (%x %x)\n", v->envelope_phase, rate, target);
+                            v->envelope_value = target;
+                            v->envelope_phase += 1;
+                        }
+                    }
                      // Calculate new position
                     uint64 next_pos;
                     if (v->backwards) {
@@ -257,10 +290,12 @@ void get_audio (Player* player, uint8* buf_, int len) {
                     else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
                         continue;
                     }
-                     // Linear interpolation
+                     // Linear interpolation.  TODO: is always +1 the right thing?
                     int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                     samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
-                    val += samp / 0x100000000LL * patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127 / 4;
+                     // TODO: make this volume calculation better and easier to understand
+                    val += samp / 0x100000000LL * patch->volume * ch->volume / 127 * ch->expression / 127
+                                                * v->velocity / 127 / 127 * v->envelope_value / (0xff << 22) / 4;
                      // Move position
                     v->sample_pos = next_pos;
                     continue;
