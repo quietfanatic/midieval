@@ -139,13 +139,11 @@ Patch* load_patch (const char* filename) {
          //  go ahead and copy that for now.
         for (uint32 j = 0; j < 6; j++) {
             uint8 byte = read_u8(f);
-            uint32 val = (uint32)(byte & 0x3f) << (9 + 3 * (3 - (byte >> 6)));
-            printf("R:%x\n", val);
-            pat->samples[i].envelope_rates[j] = val * 44100 / 48000;
+            uint32 val = (uint32)(byte & 0x3f) << (3 * (3 - (byte >> 6)));
+            pat->samples[i].envelope_rates[j] = (val * 44100 / 48000) << 10;
         }
         for (uint32 j = 0; j < 6; j++) {
             pat->samples[i].envelope_offsets[j] = read_u8(f) << 22;
-            printf("O:%x\n", pat->samples[i].envelope_offsets[j]);
         }
         skip(f, 6);  // Tremolo and vibrato stuff
         uint8 sampling_modes = read_u8(f);

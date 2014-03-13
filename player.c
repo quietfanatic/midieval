@@ -236,9 +236,10 @@ void get_audio (Player* player, uint8* buf_, int len) {
                             continue;
                         }
                         else {
-                            printf("Finished phase %hhu (%x %x)\n", v->envelope_phase, rate, target);
                             v->envelope_value = target;
-                            v->envelope_phase += 1;
+                            if (v->envelope_phase != 2) {
+                                v->envelope_phase += 1;
+                            }
                         }
                     }
                     else {
@@ -254,9 +255,10 @@ void get_audio (Player* player, uint8* buf_, int len) {
                             continue;
                         }
                         else {
-                            printf("Finished phase %hhu (%x %x)\n", v->envelope_phase, rate, target);
                             v->envelope_value = target;
-                            v->envelope_phase += 1;
+                            if (v->envelope_phase != 2) {
+                                v->envelope_phase += 1;
+                            }
                         }
                     }
                      // Calculate new position
