@@ -5,13 +5,14 @@ TODO:
  ☑ volume controllers
  ☑ read patches
  ☑ use soundfonts
- ☐ drums
+ ☑ drums
  ☐ sample envelopes
  ☐ pitch bend
  ☐ tremolo and vibrato
  ☐ ping-pong sample looping
- ☐ stop crackling (envelopes problem?)
+ ☐ why do some patches seem to have tinny overtones?
  ☐ what's the loop fractions byte?
  ☐ loop markers
+ ☐ reverb, chorus
  ☐ run events in realtime
  ☐ code cleanup and thread safety

@@ -260,7 +260,7 @@ void get_audio (Player* player, uint8* buf_, int len) {
                      // Linear interpolation
                     int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                     samp += sample->data[next_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
-                    val += samp / 0x100000000LL * patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127;
+                    val += samp / 0x100000000LL * patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127 / 4;
                      // Move position
                     v->sample_pos = next_pos;
                     continue;

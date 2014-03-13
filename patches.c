@@ -366,29 +366,47 @@ Bank* load_bank (const char* cfg) {
                 memcpy(filename, cfg, prefix);
                 memcpy(filename + prefix, word, p - word);
                 memcpy(filename + prefix + (p - word), ".pat", 5);
+                Patch* patch = load_patch(filename);
                 if (drumset) {
                     if (bank->drums[program]) {
                         free_patch(bank->drums[program]);
                     }
-                    bank->drums[program] = load_patch(filename);
+                    bank->drums[program] = patch;
                 }
                 else {
                     if (bank->patches[program]) {
                         free_patch(bank->patches[program]);
                     }
-                    bank->patches[program] = load_patch(filename);
+                    bank->patches[program] = patch;
                 }
                 free(filename);
+                skip_ws(&p, end);
+                while (p != end && *p != '\n') {
+                    char* option = read_word(&p, end);
+                    skip_ws(&p, end);
+                    require_char(&p, end, '=');
+                    skip_ws(&p, end);
+                    if (cmp_strs(option, p - option, "amp", 3)) {
+                        int32 percent = read_i32(&p, end);
+                        patch->volume = patch->volume * percent / 100;
+                    }
+                    else {
+                        read_word(&p, end);
+                    }
+                    skip_ws(&p, end);
+                }
             }
-            skip_ws(&p, end);
-            while (p != end && *p != '\n') {
-                 // For now, just skip all the parameters
-                read_word(&p, end);
+            else {
                 skip_ws(&p, end);
-                require_char(&p, end, '=');
-                skip_ws(&p, end);
-                read_word(&p, end);
-                skip_ws(&p, end);
+                while (p != end && *p != '\n') {
+                     // Just skip all the parameters
+                    read_word(&p, end);
+                    skip_ws(&p, end);
+                    require_char(&p, end, '=');
+                    skip_ws(&p, end);
+                    read_word(&p, end);
+                    skip_ws(&p, end);
+                }
             }
             line_break(&p, end);
         }
