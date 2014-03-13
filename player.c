@@ -38,6 +38,7 @@ typedef struct Channel {
     uint8 program;
     uint8 volume;
     uint8 expression;
+    int16 pitch_bend;
 } Channel;
 
 struct Player {
@@ -60,6 +61,7 @@ void reset_player (Player* p) {
     for (uint32 i = 0; i < 16; i++) {
         p->channels[i].volume = 127;
         p->channels[i].expression = 127;
+        p->channels[i].pitch_bend = 0;
     }
     p->active = 255;
     p->inactive = 0;
@@ -170,9 +172,15 @@ void do_event (Player* player, Event* event) {
             player->channels[event->channel].program = event->param1;
             break;
         }
+        case PITCH_BEND: {
+            player->channels[event->channel].pitch_bend =
+                (event->param1 << 7 | event->param2) - 8192;
+            break;
+        }
         case SET_TEMPO: {
             uint32 ms_per_beat = event->channel << 16 | event->param1 << 8 | event->param2;
             player->tick_length = (uint64)SAMPLE_RATE * ms_per_beat / 1000000 / player->seq->tpb;
+            break;
         }
         default:
             break;
