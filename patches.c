@@ -121,7 +121,7 @@ Patch* load_patch (const char* filename) {
     for (uint8 i = 0; i < pat->n_samples; i++) {
         skip(f, 7);  // Wave name
         if (read_u8(f) != 0) {
-            printf("Warning: NYI non-zero fractions byte (?) in %s\n", filename);
+//            printf("Warning: NYI non-zero fractions byte (?) in %s\n", filename);
         }
         pat->samples[i].data_size = read_u32(f) / 2;
         pat->samples[i].loop_start = read_u32(f);
@@ -383,11 +383,11 @@ Bank* load_bank (const char* cfg) {
             skip_ws(&p, end);
             while (p != end && *p != '\n') {
                  // For now, just skip all the parameters
-                char* word = read_word(&p, end);
+                read_word(&p, end);
                 skip_ws(&p, end);
                 require_char(&p, end, '=');
                 skip_ws(&p, end);
-                char* word2 = read_word(&p, end);
+                read_word(&p, end);
                 skip_ws(&p, end);
             }
             line_break(&p, end);

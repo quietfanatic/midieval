@@ -10,7 +10,8 @@ TODO:
  ☐ pitch bend
  ☐ tremolo and vibrato
  ☐ ping-pong sample looping
- ☐ stop crackling
+ ☐ stop crackling (envelopes problem?)
+ ☐ what's the loop fractions byte?
  ☐ loop markers
  ☐ run events in realtime
  ☐ code cleanup and thread safety
