@@ -21,6 +21,7 @@ typedef struct Sample {
     uint8 envelope_offsets [6];
     uint8 pan;
     uint8 loop;
+    uint8 pingpong;
     uint16 sample_rate;
     uint32 data_size;
     int16* data;

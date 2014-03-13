@@ -121,10 +121,9 @@ Patch* load_patch (const char* filename) {
     for (uint8 i = 0; i < pat->n_samples; i++) {
         skip(f, 7);  // Wave name
         if (read_u8(f) != 0) {
-            printf("Fractions byte (?) not 0 in %s at %lx\n", filename, ftell(f));
-            goto fail;
+            printf("Warning: NYI non-zero fractions byte (?) in %s\n", filename);
         }
-        pat->samples[i].data_size = read_u32(f);
+        pat->samples[i].data_size = read_u32(f) / 2;
         pat->samples[i].loop_start = read_u32(f);
         pat->samples[i].loop_start /= 2;
         pat->samples[i].loop_end = read_u32(f);
@@ -145,7 +144,7 @@ Patch* load_patch (const char* filename) {
         uint8 sampling_modes = read_u8(f);
         skip(f, 4);  // Scale(?) stuff
         skip(f, 36);  // Reserved
-        pat->samples[i].data = (int16*)read_size(f, pat->samples[i].data_size);
+        pat->samples[i].data = (int16*)read_size(f, pat->samples[i].data_size * 2);
         if (!(sampling_modes & BITS16)) {
             printf("8-bit samples NYI\n");
             goto fail;
@@ -156,10 +155,7 @@ Patch* load_patch (const char* filename) {
             }
         }
         pat->samples[i].loop = !!(sampling_modes & LOOPING);
-        if (sampling_modes & PINGPONG) {
-            printf("ping-pong samples NYI in %s\n", filename);
-            goto fail;
-        }
+        pat->samples[i].pingpong = !!(sampling_modes & PINGPONG);
         if (sampling_modes & REVERSE) {
             printf("reverse samples NYI in %s\n", filename);
             goto fail;
