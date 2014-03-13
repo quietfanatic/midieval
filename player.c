@@ -309,7 +309,7 @@ void get_audio (Player* player, uint8* buf_, int len) {
                         }
                     }
                     else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
-                        continue;
+                        goto delete_voice;
                     }
                      // Linear interpolation.  TODO: is always +1 the right thing?
                     int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
