@@ -134,11 +134,11 @@ Patch* load_patch (const char* filename) {
         pat->samples[i].root_freq = read_u32(f);
         skip(f, 2);  // Tune
         pat->samples[i].pan = read_u8(f);
-        for (uint32 i = 0; i < 6; i++) {
-            pat->samples[i].envelope_rates[i] = read_u8(f);
+        for (uint32 j = 0; j < 6; j++) {
+            pat->samples[i].envelope_rates[j] = read_u8(f);
         }
-        for (uint32 i = 0; i < 6; i++) {
-            pat->samples[i].envelope_offsets[i] = read_u8(f);
+        for (uint32 j = 0; j < 6; j++) {
+            pat->samples[i].envelope_offsets[j] = read_u8(f);
         }
         skip(f, 6);  // Tremolo and vibrato stuff
         uint8 sampling_modes = read_u8(f);
