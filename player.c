@@ -31,6 +31,7 @@ typedef struct Voice {
 
 typedef struct Channel {
      // TODO: a lot more controllers
+    uint8 program;
     uint8 volume;
     uint8 expression;
 } Channel;
@@ -127,8 +128,9 @@ void do_event (Player* player, Event* event) {
                 v->velocity = event->param2;
                 v->sample_pos = 0;
                 v->sample_index = 0;
-                if (player->bank && player->bank->patches[0]) {
-                    Patch* patch = player->bank->patches[0];
+                Channel* ch = &player->channels[v->channel];
+                if (player->bank && player->bank->patches[ch->program]) {
+                    Patch* patch = player->bank->patches[ch->program];
                     uint32 freq = freqs[v->note];
                     for (uint8 i = 0; i < patch->n_samples; i++) {
                         if (patch->samples[i].high_freq > freq) {
@@ -151,6 +153,23 @@ void do_event (Player* player, Event* event) {
                 default:
                     break;
             }
+            break;
+        }
+        case PROGRAM_CHANGE: {
+             // Silence all voices in this channel.
+            uint8* np = &player->active;
+            while (*np != 255) {
+                Voice* v = &player->voices[*np];
+                if (v->channel == event->channel) {
+                    *np = v->next;
+                    v->next = player->inactive;
+                    player->inactive = v - player->voices;
+                }
+                else {
+                    np = &v->next;
+                }
+            }
+            player->channels[event->channel].program = event->param1;
             break;
         }
         case SET_TEMPO: {
@@ -192,10 +211,10 @@ void get_audio (Player* player, uint8* buf_, int len) {
          // Now mix voices
         int32 val = 0;
         for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
-            if (player->bank && player->bank->patches[0]) {
-                Voice* v = &player->voices[i];
-                Channel* ch = &player->channels[v->channel];
-                Patch* patch = player->bank->patches[0];
+            Voice* v = &player->voices[i];
+            Channel* ch = &player->channels[v->channel];
+            if (player->bank && player->bank->patches[ch->program]) {
+                Patch* patch = player->bank->patches[ch->program];
                 Sample* sample = &patch->samples[v->sample_index];
                  // Loop
                 if (sample->loop) {
@@ -215,8 +234,6 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 v->sample_pos += 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
             }
             else {
-                Voice* v = &player->voices[i];
-                Channel* ch = &player->channels[v->channel];
                  // Loop
                 v->sample_pos %= 0x100000000LL;
                  // Add value
