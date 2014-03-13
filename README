@@ -6,10 +6,11 @@ TODO:
  ☑ read patches
  ☑ use soundfonts
  ☑ drums
- ☐ sample envelopes
+ ☑ sample envelopes
+ ☐ volumes should be exponential
  ☐ pitch bend
  ☐ tremolo and vibrato
- ☐ ping-pong sample looping
+ ☑ ping-pong sample looping
  ☐ what's the loop fractions byte?
  ☐ loop markers
  ☐ reverb, chorus
