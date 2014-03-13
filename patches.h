@@ -41,10 +41,12 @@ void print_patch (Patch*);
 
 typedef struct Bank {
     Patch* patches [128];
+    Patch* drums [128];
 } Bank;
 
 Bank* new_bank ();
 void set_patch (Bank*, uint8 instrument, const char* filename);
+void set_drum (Bank*, uint8 instrument, const char* filename);
 void free_bank (Bank*);
 
 Bank* load_bank (const char* cfg_filename);

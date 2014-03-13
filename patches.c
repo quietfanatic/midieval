@@ -229,10 +229,17 @@ void set_patch (Bank* bank, uint8 instrument, const char* filename) {
         bank->patches[instrument] = load_patch(filename);
     }
 }
+void set_drum (Bank* bank, uint8 instrument, const char* filename) {
+    if (instrument < 128) {
+        bank->drums[instrument] = load_patch(filename);
+    }
+}
 void free_bank (Bank* bank) {
     for (uint8 i = 0; i < 128; i++) {
         if (bank->patches[i])
             free_patch(bank->patches[i]);
+        if (bank->drums[i])
+            free_patch(bank->drums[i]);
     }
     free(bank);
 }
@@ -354,15 +361,23 @@ Bank* load_bank (const char* cfg) {
             }
             skip_ws(&p, end);
             char* word = read_word(&p, end);
-            if (!drumset && bank_num == 0) {
+            if (bank_num == 0) {
                 char* filename = malloc(prefix + (p - word) + 5);
                 memcpy(filename, cfg, prefix);
                 memcpy(filename + prefix, word, p - word);
                 memcpy(filename + prefix + (p - word), ".pat", 5);
-                if (bank->patches[program]) {
-                    free_patch(bank->patches[program]);
+                if (drumset) {
+                    if (bank->drums[program]) {
+                        free_patch(bank->drums[program]);
+                    }
+                    bank->drums[program] = load_patch(filename);
                 }
-                bank->patches[program] = load_patch(filename);
+                else {
+                    if (bank->patches[program]) {
+                        free_patch(bank->patches[program]);
+                    }
+                    bank->patches[program] = load_patch(filename);
+                }
                 free(filename);
             }
             skip_ws(&p, end);
