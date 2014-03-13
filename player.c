@@ -105,12 +105,14 @@ void do_event (Player* player, Event* event) {
     switch (event->type) {
         case NOTE_OFF: {
             do_note_off:
-            for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
-                Voice* v = &player->voices[i];
-                if (v->channel == event->channel && v->note == event->param1) {
-                    if (v->envelope_phase < 3) {
-                        v->envelope_phase = 3;
-                        break;
+            if (event->channel != 9) {
+                for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
+                    Voice* v = &player->voices[i];
+                    if (v->channel == event->channel && v->note == event->param1) {
+                        if (v->envelope_phase < 3) {
+                            v->envelope_phase = 3;
+                            break;
+                        }
                     }
                 }
             }
