@@ -2,8 +2,15 @@ A MIDI player using SDL_audio.
 
 TODO:
  ☑ play notes
- ☐ controllers
- ☐ read soundfonts
- ☐ use soundfonts
- ☐ loops
+ ☑ volume controllers
+ ☑ read patches
+ ☑ use soundfonts
+ ☐ drums
+ ☐ sample envelopes
+ ☐ pitch bend
+ ☐ tremolo and vibrato
+ ☐ ping-pong sample looping
+ ☐ stop crackling
+ ☐ loop markers
  ☐ run events in realtime
+ ☐ code cleanup and thread safety
