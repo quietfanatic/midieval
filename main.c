@@ -29,7 +29,6 @@ int main (int argc, char** argv) {
         printf("Failed to load bank?\n");
         exit(1);
     }
-    print_patch(bank->patches[89]);
     set_bank(player, bank);
     Sequence* seq = argc == 2
         ? load_midi(argv[1])
