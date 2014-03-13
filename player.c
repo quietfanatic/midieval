@@ -217,22 +217,31 @@ void get_audio (Player* player, uint8* buf_, int len) {
             if (player->bank && player->bank->patches[ch->program]) {
                 Patch* patch = player->bank->patches[ch->program];
                 Sample* sample = &patch->samples[v->sample_index];
+                uint32 freq = freqs[v->note];
+                 // Calculate new position
+                uint64 next_pos;
+                if (v->backwards) {
+                    next_pos = v->sample_pos - 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                }
+                else {
+                    next_pos = v->sample_pos + 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                }
                  // Loop
                 if (sample->loop) {
                     if (v->backwards) {
-                        if (v->sample_pos <= sample->loop_start * 0x100000000LL) {
+                        if (next_pos <= sample->loop_start * 0x100000000LL) {
                             v->backwards = 0;
-                            v->sample_pos = 2 * sample->loop_start * 0x100000000LL - v->sample_pos;
+                            next_pos = 2 * sample->loop_start * 0x100000000LL - next_pos;
                         }
                     }
                     else {
                         if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
                             if (sample->pingpong) {
                                 v->backwards = 1;
-                                v->sample_pos = 2 * sample->loop_end * 0x100000000LL - v->sample_pos;
+                                next_pos = 2 * sample->loop_end * 0x100000000LL - next_pos;
                             }
                             else {
-                                v->sample_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
+                                next_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
                             }
                         }
                     }
@@ -240,18 +249,12 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
                     continue;
                 }
-                 // Add value  TODO: this may break right before the end
+                 // Linear interpolation
                 int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
-                samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
+                samp += sample->data[next_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
                 val += samp / 0x100000000LL * patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127;
                  // Move position
-                uint32 freq = freqs[v->note];
-                if (v->backwards) {
-                    v->sample_pos -= 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
-                }
-                else {
-                    v->sample_pos += 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
-                }
+                v->sample_pos = next_pos;
             }
             else {
                  // Loop
