@@ -25,6 +25,7 @@ typedef struct Voice {
     uint8 channel;
     uint8 velocity;
     uint8 sample_index;
+    uint8 backwards;
      // 32:32 fixed point
     uint64 sample_pos;
 } Voice;
@@ -218,8 +219,22 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 Sample* sample = &patch->samples[v->sample_index];
                  // Loop
                 if (sample->loop) {
-                    if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
-                        v->sample_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
+                    if (v->backwards) {
+                        if (v->sample_pos <= sample->loop_start * 0x100000000LL) {
+                            v->backwards = 0;
+                            v->sample_pos = 2 * sample->loop_start * 0x100000000LL - v->sample_pos;
+                        }
+                    }
+                    else {
+                        if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
+                            if (sample->pingpong) {
+                                v->backwards = 1;
+                                v->sample_pos = 2 * sample->loop_end * 0x100000000LL - v->sample_pos;
+                            }
+                            else {
+                                v->sample_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
+                            }
+                        }
                     }
                 }
                 else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
@@ -231,7 +246,12 @@ void get_audio (Player* player, uint8* buf_, int len) {
                 val += samp / 0x100000000LL * patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127;
                  // Move position
                 uint32 freq = freqs[v->note];
-                v->sample_pos += 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                if (v->backwards) {
+                    v->sample_pos -= 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                }
+                else {
+                    v->sample_pos += 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                }
             }
             else {
                  // Loop
