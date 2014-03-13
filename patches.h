@@ -7,6 +7,7 @@ typedef uint8_t uint8;
 typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef int16_t int16;
+typedef int32_t int32;
 
 typedef struct Sample {
      // in milliHz
@@ -44,5 +45,7 @@ typedef struct Bank {
 Bank* new_bank ();
 void set_patch (Bank*, uint8 instrument, const char* filename);
 void free_bank (Bank*);
+
+Bank* load_bank (const char* cfg_filename);
 
 #endif

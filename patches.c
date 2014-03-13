@@ -1,5 +1,6 @@
 #include "patches.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,22 +93,22 @@ Patch* load_patch (const char* filename) {
     skip(f, 4);  // Data size
     skip(f, 36);  // Reserved
     if (read_u16(f) != 0) {
-        printf("Instrument ID (?) was not 0x0000\n");
+        printf("Instrument ID (?) was not 0x0000 in %s\n", filename);
         goto fail;
     }
     skip(f, 16);  // Instrument name
     skip(f, 4);  // Instrument size
     if (read_u8(f) != 1) {
-        printf("Instrument has too many layers (?)\n");
+        printf("Instrument has too many layers (?) in %s\n", filename);
         goto fail;
     }
     skip(f, 40);  // Reserved
     if (read_u8(f) != 0) {
-        printf("Layer duplicate (?) not 0 (?)\n");
+        printf("Layer duplicate (?) not 0 (?) in %s\n", filename);
         goto fail;
     }
     if (read_u8(f) != 0) {
-        printf("Layer ID (?) not 0 (?)\n");
+        printf("Layer ID (?) not 0 (?) in %s\n", filename);
         goto fail;
     }
     skip(f, 4);  // Layer size
@@ -120,7 +121,7 @@ Patch* load_patch (const char* filename) {
     for (uint8 i = 0; i < pat->n_samples; i++) {
         skip(f, 7);  // Wave name
         if (read_u8(f) != 0) {
-            printf("Fractions byte (?) not 0\n");
+            printf("Fractions byte (?) not 0 in %s at %lx\n", filename, ftell(f));
             goto fail;
         }
         pat->samples[i].data_size = read_u32(f);
@@ -156,11 +157,11 @@ Patch* load_patch (const char* filename) {
         }
         pat->samples[i].loop = !!(sampling_modes & LOOPING);
         if (sampling_modes & PINGPONG) {
-            printf("ping-pong samples NYI\n");
+            printf("ping-pong samples NYI in %s\n", filename);
             goto fail;
         }
         if (sampling_modes & REVERSE) {
-            printf("reverse samples NYI\n");
+            printf("reverse samples NYI in %s\n", filename);
             goto fail;
         }
     }
@@ -235,4 +236,157 @@ void free_bank (Bank* bank) {
             free_patch(bank->patches[i]);
     }
     free(bank);
+}
+
+char* read_word (char** p, char* end) {
+    char* r = *p;
+    while (*p != end && !isspace(**p) && **p != '=' && **p != '#') {
+        (*p)++;
+    }
+    return r;
+}
+int32 read_i32 (char** p, char* end) {
+    if (*p == end) {
+        fprintf(stderr, "Parse error: expected number but got EOF\n");
+        exit(1);
+    }
+    if (!isdigit(**p)) {
+        fprintf(stderr, "Parse error: expected number but got '%c'\n", **p);
+        exit(1);
+    }
+    int32 r = 0;
+    while (*p != end && isdigit(**p)) {
+        r *= 10;
+        r += **p - '0';
+        (*p)++;
+    }
+    return r;
+}
+void require_char (char** p, char* end, char c) {
+    if (*p == end) {
+        fprintf(stderr, "Parse error: expected '%c' but got EOF\n", c);
+        exit(1);
+    }
+    if (**p != c) {
+        fprintf(stderr, "Parse error: expected '%c' but got '%c'\n", c, **p);
+        exit(1);
+    }
+    (*p)++;
+}
+void skip_ws (char** p, char* end) {
+    while (*p != end && (**p == ' ' || **p == '\t'))
+        (*p)++;
+    if (*p != end && **p == '#') {
+        while (*p != end && **p != '\n') {
+            (*p)++;
+        }
+    }
+}
+int cmp_strs (char* a, size_t as, const char* b, size_t bs) {
+    return as == bs && strncmp(a, b, as) == 0;
+}
+
+uint32 line;
+char* line_begin;
+
+void line_break (char** p, char* end) {
+    require_char(p, end, '\n');
+    line += 1;
+    line_begin = *p;
+}
+
+Bank* load_bank (const char* cfg) {
+    int32 prefix = -1;
+    for (int32 i = 0; cfg[i]; i++) {
+        if (cfg[i] == '/') prefix = i + 1;
+    }
+    FILE* f = fopen(cfg, "r");
+    if (!f) {
+        fprintf(stderr, "Could not open %s for reading: %s\n", cfg, strerror(errno));
+        exit(1);
+    }
+    fseek(f, 0, SEEK_END);
+    size_t size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char* dat = malloc(size);
+    if (fread(dat, 1, size, f) != size) {
+        fprintf(stderr, "Could not read from %s: %s\n", cfg, strerror(errno));
+        exit(1);
+    }
+    if (fclose(f) != 0) {
+        fprintf(stderr, "Could not close %s: %s\n", cfg, strerror(errno));
+        exit(1);
+    }
+    char* p = dat;
+    char* end = dat + size;
+    line = 1;
+    line_begin = dat;
+
+    Bank* bank = new_bank();
+    uint32 bank_num = 0;
+    int drumset = 0;
+
+    skip_ws(&p, end);
+    while (p != end) {
+        if (isalpha(*p)) {
+            char* word = read_word(&p, end);
+            if (cmp_strs(word, p - word, "bank", 4)) {
+                skip_ws(&p, end);
+                bank_num = read_i32(&p, end);
+                drumset = 0;
+            }
+            else if (cmp_strs(word, p - word, "drumset", 7)) {
+                skip_ws(&p, end);
+                bank_num = read_i32(&p, end);
+                drumset = 1;
+            }
+            else {
+                fprintf(stderr, "Unrecognized command beginning with '%c'\n", *word);
+                exit(1);
+            }
+            skip_ws(&p, end);
+            line_break(&p, end);
+        }
+        else if (isdigit(*p)) {
+            int32 program = read_i32(&p, end);
+            if (program < 0 || program > 127) {
+                fprintf(stderr, "Invalid program number: %d at %u:%lu (%lu)\n", program, line, p - line_begin, p - dat);
+                exit(1);
+            }
+            skip_ws(&p, end);
+            char* word = read_word(&p, end);
+            if (!drumset && bank_num == 0) {
+                char* filename = malloc(prefix + (p - word) + 5);
+                memcpy(filename, cfg, prefix);
+                memcpy(filename + prefix, word, p - word);
+                memcpy(filename + prefix + (p - word), ".pat", 5);
+                if (bank->patches[program]) {
+                    free_patch(bank->patches[program]);
+                }
+                bank->patches[program] = load_patch(filename);
+                free(filename);
+            }
+            skip_ws(&p, end);
+            while (p != end && *p != '\n') {
+                 // For now, just skip all the parameters
+                char* word = read_word(&p, end);
+                skip_ws(&p, end);
+                require_char(&p, end, '=');
+                skip_ws(&p, end);
+                char* word2 = read_word(&p, end);
+                skip_ws(&p, end);
+            }
+            line_break(&p, end);
+        }
+        else if (*p == '\n') {
+            line_break(&p, end);
+        }
+        else {
+            fprintf(stderr, "Parse error: Unexpected char \\x%02hhX at %u:%lu\n", *p, line, p - line_begin);
+            exit(1);
+        }
+        skip_ws(&p, end);
+    }
+    free(dat);
+    return bank;
 }
