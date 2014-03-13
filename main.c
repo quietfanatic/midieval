@@ -25,11 +25,11 @@ int main (int argc, char** argv) {
         printf("SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
     }
     Bank* bank = load_bank("/usr/local/share/eawpats/gravis.cfg");
-    if (!bank->patches[0]) {
+    if (!bank->patches[89]) {
         printf("Failed to load bank?\n");
         exit(1);
     }
-    print_patch(bank->patches[0]);
+    print_patch(bank->patches[89]);
     set_bank(player, bank);
     Sequence* seq = argc == 2
         ? load_midi(argv[1])

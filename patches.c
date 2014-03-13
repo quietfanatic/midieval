@@ -201,6 +201,9 @@ void print_patch (Patch* pat) {
             pat->samples[i].envelope_offsets[2], pat->samples[i].envelope_offsets[3],
             pat->samples[i].envelope_offsets[4], pat->samples[i].envelope_offsets[5]
         );
+        printf("    pan: %hhu\n", pat->samples[i].pan);
+        printf("    loop: %hhu\n", pat->samples[i].loop);
+        printf("    pingpong: %hhu\n", pat->samples[i].pingpong);
         printf("    sample_rate: %hu\n", pat->samples[i].sample_rate);
         printf("    data_size: %u\n", pat->samples[i].data_size);
         printf("    A bit of data: %hx %hx %hx %hx %hx %hx %hx %hx\n",
