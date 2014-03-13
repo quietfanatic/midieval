@@ -127,6 +127,7 @@ void do_event (Player* player, Event* event) {
                 v->channel = event->channel;
                 v->note = event->param1;
                 v->velocity = event->param2;
+                v->backwards = 0;
                 v->sample_pos = 0;
                 v->sample_index = 0;
                 Channel* ch = &player->channels[v->channel];

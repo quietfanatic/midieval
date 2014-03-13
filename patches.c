@@ -150,7 +150,7 @@ Patch* load_patch (const char* filename) {
             goto fail;
         }
         if (sampling_modes & UNSIGNED) {
-            for (uint32 j = 0; j < pat->samples[i].data_size; j += 2) {
+            for (uint32 j = 0; j < pat->samples[i].data_size; j++) {
                 pat->samples[i].data[j] ^= 0x8000;
             }
         }
@@ -206,7 +206,7 @@ void print_patch (Patch* pat) {
         printf("    pingpong: %hhu\n", pat->samples[i].pingpong);
         printf("    sample_rate: %hu\n", pat->samples[i].sample_rate);
         printf("    data_size: %u\n", pat->samples[i].data_size);
-        printf("    A bit of data: %hx %hx %hx %hx %hx %hx %hx %hx\n",
+        printf("    A bit of data: %04hx %04hx %04hx %04hx %04hx %04hx %04hx %04hx\n",
             pat->samples[i].data[0], pat->samples[i].data[1],
             pat->samples[i].data[2], pat->samples[i].data[3],
             pat->samples[i].data[4], pat->samples[i].data[5],
