@@ -104,12 +104,14 @@ void set_bank (Player* player, Bank* bank) {
 void do_event (Player* player, Event* event) {
     switch (event->type) {
         case NOTE_OFF: {
-            do_note_off:  // Do all notes.  TODO: do only one note
+            do_note_off:
             for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
                 Voice* v = &player->voices[i];
                 if (v->channel == event->channel && v->note == event->param1) {
-                    if (v->envelope_phase < 3)
+                    if (v->envelope_phase < 3) {
                         v->envelope_phase = 3;
+                        break;
+                    }
                 }
             }
             break;
@@ -227,6 +229,15 @@ void get_audio (Player* player, uint8* buf_, int len) {
         for (uint8* ip = &player->active; *ip != 255; ip = next_ip) {
             Voice* v = &player->voices[*ip];
             next_ip = &v->next;
+            goto skip_delete_voice;
+            delete_voice: {
+                next_ip = ip;
+                *ip = v->next;
+                v->next = player->inactive;
+                player->inactive = v - player->voices;
+                continue;
+            }
+            skip_delete_voice: { }
             Channel* ch = &player->channels[v->channel];
             if (player->bank) {
                 Patch* patch = v->channel == 9
@@ -244,12 +255,7 @@ void get_audio (Player* player, uint8* buf_, int len) {
                             v->envelope_value += rate;
                         }
                         else if (v->envelope_phase == 5) {
-                             // Delete voice
-                            next_ip = ip;
-                            *ip = v->next;
-                            v->next = player->inactive;
-                            player->inactive = v - player->voices;
-                            continue;
+                            goto delete_voice;
                         }
                         else {
                             v->envelope_value = target;
@@ -262,13 +268,8 @@ void get_audio (Player* player, uint8* buf_, int len) {
                         if (target + rate < v->envelope_value) {
                             v->envelope_value -= rate;
                         }
-                        else if (v->envelope_phase == 5) {
-                             // Delete voice
-                            next_ip = ip;
-                            *ip = v->next;
-                            v->next = player->inactive;
-                            player->inactive = v - player->voices;
-                            continue;
+                        else if (v->envelope_phase == 5 || target == 0) {
+                            goto delete_voice;
                         }
                         else {
                             v->envelope_value = target;
