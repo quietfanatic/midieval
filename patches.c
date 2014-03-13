@@ -216,3 +216,23 @@ void print_patch (Patch* pat) {
     }
     printf("}\n");
 }
+
+Bank* new_bank () {
+    Bank* bank = malloc(sizeof(Bank));
+    for (uint8 i = 0; i < 128; i++) {
+        bank->patches[i] = NULL;
+    }
+    return bank;
+}
+void set_patch (Bank* bank, uint8 instrument, const char* filename) {
+    if (instrument < 128) {
+        bank->patches[instrument] = load_patch(filename);
+    }
+}
+void free_bank (Bank* bank) {
+    for (uint8 i = 0; i < 128; i++) {
+        if (bank->patches[i])
+            free_patch(bank->patches[i]);
+    }
+    free(bank);
+}

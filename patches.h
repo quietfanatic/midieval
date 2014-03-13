@@ -37,4 +37,12 @@ void free_patch (Patch*);
 
 void print_patch (Patch*);
 
+typedef struct Bank {
+    Patch* patches [128];
+} Bank;
+
+Bank* new_bank ();
+void set_patch (Bank*, uint8 instrument, const char* filename);
+void free_bank (Bank*);
+
 #endif

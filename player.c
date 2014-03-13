@@ -39,8 +39,7 @@ struct Player {
      // Specification
     uint32 tick_length;
     Sequence* seq;
-     // TODO: have more than one of these :)
-    Patch* patch;
+    Bank* bank;
      // State
     Timed_Event* current;
     uint32 samples_to_tick;
@@ -68,7 +67,7 @@ Player* new_player () {
     init_freqs();
     Player* player = (Player*)malloc(sizeof(Player));
     reset_player(player);
-    player->patch = NULL;
+    player->bank = NULL;
     return player;
 }
 void free_player (Player* player) {
@@ -84,8 +83,8 @@ void play_sequence (Player* player, Sequence* seq) {
     player->ticks_to_event = seq->events[0].time;
     player->done = 0;
 }
-void set_patch (Player* player, Patch* patch) {
-    player->patch = patch;
+void set_bank (Player* player, Bank* bank) {
+    player->bank = bank;
 }
 
 void do_event (Player* player, Event* event) {
@@ -128,10 +127,11 @@ void do_event (Player* player, Event* event) {
                 v->velocity = event->param2;
                 v->sample_pos = 0;
                 v->sample_index = 0;
-                if (player->patch) {
+                if (player->bank && player->bank->patches[0]) {
+                    Patch* patch = player->bank->patches[0];
                     uint32 freq = freqs[v->note];
-                    for (uint8 i = 0; i < player->patch->n_samples; i++) {
-                        if (player->patch->samples[i].high_freq > freq) {
+                    for (uint8 i = 0; i < patch->n_samples; i++) {
+                        if (patch->samples[i].high_freq > freq) {
                             v->sample_index = i;
                             break;
                         }
@@ -192,10 +192,11 @@ void get_audio (Player* player, uint8* buf_, int len) {
          // Now mix voices
         int32 val = 0;
         for (uint8 i = player->active; i != 255; i = player->voices[i].next) {
-            if (player->patch) {
+            if (player->bank && player->bank->patches[0]) {
                 Voice* v = &player->voices[i];
                 Channel* ch = &player->channels[v->channel];
-                Sample* sample = &player->patch->samples[v->sample_index];
+                Patch* patch = player->bank->patches[0];
+                Sample* sample = &patch->samples[v->sample_index];
                  // Loop
                 if (sample->loop) {
                     if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
@@ -208,7 +209,7 @@ void get_audio (Player* player, uint8* buf_, int len) {
                  // Add value  TODO: this may break right before the end
                 int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                 samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
-                val += samp / 0x100000000LL * player->patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127;
+                val += samp / 0x100000000LL * patch->volume * v->velocity / 127 * ch->volume / 127 * ch->expression / 127 / 127;
                  // Move position
                 uint32 freq = freqs[v->note];
                 v->sample_pos += 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;

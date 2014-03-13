@@ -11,7 +11,7 @@ void reset_player (Player*);
 void free_player (Player*);
 
 void play_sequence (Player*, Sequence*);
-void set_patch (Player*, Patch*);
+void set_bank (Player*, Bank*);
 
 void get_audio (Player*, uint8* buf, int len);
 
