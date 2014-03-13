@@ -8,7 +8,7 @@ TODO:
  ☑ drums
  ☑ sample envelopes
  ☐ volumes should be exponential
- ☐ pitch bend
+ ☑ pitch bend
  ☐ tremolo and vibrato
  ☑ ping-pong sample looping
  ☐ what's the loop fractions byte?

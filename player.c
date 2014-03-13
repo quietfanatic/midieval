@@ -7,16 +7,23 @@
 #include <stdlib.h>
 #include <math.h>
 
- // In milliHz
-uint32 freqs [128];
+ // In MilliHz, between note 0 and note 12
+uint32 freqs [256];
 void init_freqs () {
     static int initted = 0;
     if (!initted) {
         initted = 1;
-        for (uint8 i = 0; i < 128; i++) {
-            freqs[i] = 440000 * pow(2.0, (i - 69) / 12.0);
+        for (uint32 i = 0; i < 256; i++) {
+            freqs[i] = 440000 * pow(2.0, ((i*12.0/256.0) - 69) / 12.0);
         }
     }
+}
+
+ // Input: 8:8 fixed point
+ // Output: frequency in milliHz
+uint32 get_freq (uint16 note) {
+    uint16 note2 = note / 12;
+    return freqs[note2 % 256] << (note2 / 256);
 }
 
 typedef struct Voice {
@@ -130,7 +137,7 @@ void do_event (Player* player, Event* event) {
                         ? player->bank->drums[v->note]
                         : player->bank->patches[ch->program];
                     if (patch) {
-                        uint32 freq = freqs[v->note];
+                        uint32 freq = get_freq(v->note << 8);
                         for (uint8 i = 0; i < patch->n_samples; i++) {
                             if (patch->samples[i].high_freq > freq) {
                                 v->sample_index = i;
@@ -174,7 +181,7 @@ void do_event (Player* player, Event* event) {
         }
         case PITCH_BEND: {
             player->channels[event->channel].pitch_bend =
-                (event->param1 << 7 | event->param2) - 8192;
+                (event->param2 << 7 | event->param1) - 8192;
             break;
         }
         case SET_TEMPO: {
@@ -227,7 +234,8 @@ void get_audio (Player* player, uint8* buf_, int len) {
                     : player->bank->patches[ch->program];
                 if (patch) {
                     Sample* sample = &patch->samples[v->sample_index];
-                    uint32 freq = freqs[v->note];
+                     // Account for pitch bend
+                    uint32 freq = get_freq(v->note * 256 + ch->pitch_bend / 16);
                      // Do envelopes  TODO: fade to 0 at end
                     uint32 rate = sample->envelope_rates[v->envelope_phase];
                     uint32 target = sample->envelope_offsets[v->envelope_phase];
@@ -318,7 +326,7 @@ void get_audio (Player* player, uint8* buf_, int len) {
             int32 sign = v->sample_pos < 0x80000000LL ? -1 : 1;
             val += sign * v->velocity * ch->volume * ch->expression / (32*127);
              // Move position
-            uint32 freq = freqs[v->note];
+            uint32 freq = get_freq(v->note << 8);
             v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
         }
         buf[i] = val > 32767 ? 32767 : val < -32768 ? -32768 : val;
