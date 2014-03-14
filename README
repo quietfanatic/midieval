@@ -1,5 +1,8 @@
 A MIDI player using SDL_audio.
 
+This is currently still experimental.  No guarantees it won't explode with any
+ patches besides eawpats.
+
 TODO:
  ☑ play notes
  ☑ volume controllers
@@ -7,8 +10,11 @@ TODO:
  ☑ use soundfonts
  ☑ drums
  ☑ sample envelopes
+ ☐ figure out more precise envelope semantics
+ ☐ envelope controllers
  ☐ volumes should be exponential
  ☑ pitch bend
+ ☐ pitch bend range
  ☐ tremolo and vibrato
  ☑ ping-pong sample looping
  ☐ what's the loop fractions byte?
