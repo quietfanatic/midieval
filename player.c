@@ -328,9 +328,14 @@ void get_audio (Player* player, uint8* buf_, int len) {
                      // Linear interpolation.  TODO: is always +1 the right thing?
                     int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                     samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
-                     // TODO: make this volume calculation better and easier to understand
-                    uint64 val = samp / 0x100000000LL * patch->volume * ch->volume / 127 * ch->expression / 127
-                                                      * v->velocity / 127 / 127 * v->envelope_value / (0xff << 22) / 4;
+                     // Volume calculation.  Is there a better way to do this?
+                    uint64 envelope_volume = v->envelope_value / (0xff << 15);
+                    uint32 volume = (uint32)patch->volume * patch->volume
+                                  * ch->volume * ch->volume / (127*127)
+                                  * ch->expression * ch->expression / (127*127)
+                                  * v->velocity * v->velocity / (127*127)
+                                  * envelope_volume * envelope_volume / (127*127);
+                    uint64 val = samp / 0x100000000LL * volume / (127*127);
                     left += val * (64 + ch->pan) / 64;
                     right += val * (64 - ch->pan) / 64;
                      // Move position
