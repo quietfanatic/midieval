@@ -6,6 +6,7 @@
 typedef uint8_t uint8;
 typedef uint16_t uint16;
 typedef uint32_t uint32;
+typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
 
@@ -30,6 +31,7 @@ typedef struct Sample {
 typedef struct Patch {
      // TODO: do we need any more information?
     uint16 volume;
+    int8 note;
     uint8 n_samples;
     Sample* samples;
 } Patch;

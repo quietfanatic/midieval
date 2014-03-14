@@ -139,9 +139,18 @@ void do_event (Player* player, Event* event) {
                  // Decide which patch sample we're using
                 Channel* ch = &player->channels[v->channel];
                 if (player->bank) {
-                    Patch* patch = v->channel == 9
-                        ? player->bank->drums[v->note]
-                        : player->bank->patches[ch->program];
+                    Patch* patch;
+                    if (v->channel == 9) {
+                        patch = player->bank->drums[v->note];
+                        if (patch) {
+                            if (patch->note >= 0) {
+                                v->note = patch->note;
+                            }
+                        }
+                    }
+                    else {
+                        patch = player->bank->patches[ch->program];
+                    }
                     if (patch) {
                         uint32 freq = get_freq(v->note << 8);
                         for (uint8 i = 0; i < patch->n_samples; i++) {

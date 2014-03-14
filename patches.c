@@ -89,6 +89,7 @@ Patch* load_patch (const char* filename) {
     skip(f, 2);  // Waveforms?
     Patch* pat = malloc(sizeof(Patch));
     pat->samples = NULL;
+    pat->note = -1;
     pat->volume = read_u16(f);
     skip(f, 4);  // Data size
     skip(f, 36);  // Reserved
@@ -394,6 +395,12 @@ Bank* load_bank (const char* cfg) {
                     if (cmp_strs(option, p - option, "amp", 3)) {
                         int32 percent = read_i32(&p, end);
                         patch->volume = patch->volume * percent / 100;
+                    }
+                    else if (cmp_strs(option, p - option, "note", 4)) {
+                        int32 note = read_i32(&p, end);
+                        if (note >= 0 && note <= 127) {
+                            patch->note = note;
+                        }
                     }
                     else {
                         read_word(&p, end);
