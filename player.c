@@ -45,6 +45,7 @@ typedef struct Channel {
     uint8 program;
     uint8 volume;
     uint8 expression;
+    int8 pan;
     int16 pitch_bend;
 } Channel;
 
@@ -69,6 +70,7 @@ void reset_player (Player* p) {
         p->channels[i].volume = 127;
         p->channels[i].expression = 127;
         p->channels[i].pitch_bend = 0;
+        p->channels[i].pan = 0;
     }
     p->active = 255;
     p->inactive = 0;
@@ -161,6 +163,9 @@ void do_event (Player* player, Event* event) {
                 case EXPRESSION:
                     player->channels[event->channel].expression = event->param2;
                     break;
+                case PAN:
+                    player->channels[event->channel].pan = event->param2 - 64;
+                    break;
                 default:
                     break;
             }
@@ -232,7 +237,8 @@ void get_audio (Player* player, uint8* buf_, int len) {
             player->samples_to_tick = player->tick_length;
         }
          // Now mix voices
-        int32 val = 0;
+        int32 left = 0;
+        int32 right = 0;
         uint8* next_ip;
         for (uint8* ip = &player->active; *ip != 255; ip = next_ip) {
             Voice* v = &player->voices[*ip];
@@ -321,8 +327,10 @@ void get_audio (Player* player, uint8* buf_, int len) {
                     int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                     samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
                      // TODO: make this volume calculation better and easier to understand
-                    val += samp / 0x100000000LL * patch->volume * ch->volume / 127 * ch->expression / 127
-                                                * v->velocity / 127 / 127 * v->envelope_value / (0xff << 22) / 4;
+                    uint64 val = samp / 0x100000000LL * patch->volume * ch->volume / 127 * ch->expression / 127
+                                                      * v->velocity / 127 / 127 * v->envelope_value / (0xff << 22) / 4;
+                    left += val * (64 + ch->pan) / 64;
+                    right += val * (64 - ch->pan) / 64;
                      // Move position
                     v->sample_pos = next_pos;
                     continue;
@@ -333,13 +341,15 @@ void get_audio (Player* player, uint8* buf_, int len) {
             v->sample_pos %= 0x100000000LL;
              // Add value
             int32 sign = v->sample_pos < 0x80000000LL ? -1 : 1;
-            val += sign * v->velocity * ch->volume * ch->expression / (32*127);
+            uint32 val = sign * v->velocity * ch->volume * ch->expression / (32*127);
+            left += val;
+            right += val;
              // Move position
             uint32 freq = get_freq(v->note << 8);
             v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
         }
-        buf[i].l = val > 32767 ? 32767 : val < -32768 ? -32768 : val;
-        buf[i].r = val > 32767 ? 32767 : val < -32768 ? -32768 : val;
+        buf[i].l = left > 32767 ? 32767 : left < -32768 ? -32768 : left;
+        buf[i].r = right > 32767 ? 32767 : right < -32768 ? -32768 : right;
     }
 }
 
