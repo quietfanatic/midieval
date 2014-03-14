@@ -15,7 +15,7 @@ int main (int argc, char** argv) {
     SDL_AudioSpec spec;
     spec.freq = 48000;
     spec.format = AUDIO_S16;
-    spec.channels = 1;
+    spec.channels = 2;
     spec.samples = 4096;
     spec.callback = (void(*)(void*,uint8*,int))get_audio;
     spec.userdata = player;

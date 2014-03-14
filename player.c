@@ -198,13 +198,19 @@ void do_event (Player* player, Event* event) {
     }
 }
 
+typedef struct Samp {
+    int16 l;
+    int16 r;
+} Samp;
+
 void get_audio (Player* player, uint8* buf_, int len) {
     Sequence* seq = player->seq;
-    int16* buf = (int16*)buf_;
-    len /= 2;  // Assuming always an even number
+    Samp* buf = (Samp*)buf_;
+    len /= 4;  // Assuming always a whole number of samples
     if (!seq || player->done) {
         for (int i = 0; i < len; i++) {
-            buf[i] = 0;
+            buf[i].l = 0;
+            buf[i].r = 0;
         }
         return;
     }
@@ -332,7 +338,8 @@ void get_audio (Player* player, uint8* buf_, int len) {
             uint32 freq = get_freq(v->note << 8);
             v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
         }
-        buf[i] = val > 32767 ? 32767 : val < -32768 ? -32768 : val;
+        buf[i].l = val > 32767 ? 32767 : val < -32768 ? -32768 : val;
+        buf[i].r = val > 32767 ? 32767 : val < -32768 ? -32768 : val;
     }
 }
 
