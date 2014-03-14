@@ -8,7 +8,7 @@
 #include <math.h>
 
  // In MilliHz, between note 0 and note 12
-uint32 freqs [256];
+uint16 freqs [256];
 void init_freqs () {
     static int initted = 0;
     if (!initted) {
