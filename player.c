@@ -18,6 +18,17 @@ void init_freqs () {
         }
     }
 }
+ // Using magic value 1.66096404744 stolen from TiMidity source
+uint16 vols [128];
+void init_vols () {
+    static int initted = 0;
+    if (!initted) {
+        initted = 1;
+        for (uint8 i = 0; i < 128; i++) {
+            vols[i] = 65535 * pow(i / 127.0, 1.66096404744);
+        }
+    }
+}
 
  // Input: 8:8 fixed point
  // Output: frequency in milliHz
@@ -81,6 +92,7 @@ void reset_player (Player* p) {
 
 Player* new_player () {
     init_freqs();
+    init_vols();
     Player* player = (Player*)malloc(sizeof(Player));
     reset_player(player);
     player->bank = NULL;
@@ -330,12 +342,12 @@ void get_audio (Player* player, uint8* buf_, int len) {
                     samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
                      // Volume calculation.  Is there a better way to do this?
                     uint64 envelope_volume = v->envelope_value / (0xff << 15);
-                    uint32 volume = (uint32)patch->volume * patch->volume
-                                  * ch->volume * ch->volume / (127*127)
-                                  * ch->expression * ch->expression / (127*127)
-                                  * v->velocity * v->velocity / (127*127)
-                                  * envelope_volume * envelope_volume / (127*127);
-                    uint64 val = samp / 0x100000000LL * volume / (127*127);
+                    uint32 volume = (uint32)vols[patch->volume]
+                                  * vols[ch->volume] / 65535
+                                  * vols[ch->expression] / 65535
+                                  * vols[v->velocity] / 65535
+                                  * vols[envelope_volume] / 65535;
+                    uint64 val = samp / 0x100000000LL * volume / 65535;
                     left += val * (64 + ch->pan) / 64;
                     right += val * (64 - ch->pan) / 64;
                      // Move position
