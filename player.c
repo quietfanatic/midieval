@@ -1,5 +1,5 @@
 #include "player.h"
-#include "midi_files.h"
+#include "patch_files.h"
 
 #define SAMPLE_RATE 48000
 
@@ -64,7 +64,7 @@ struct Player {
      // Specification
     uint32 tick_length;
     Sequence* seq;
-    Bank* bank;
+    Bank bank;
      // State
     Timed_Event* current;
     uint32 samples_to_tick;
@@ -95,10 +95,11 @@ Player* new_player () {
     init_vols();
     Player* player = (Player*)malloc(sizeof(Player));
     reset_player(player);
-    player->bank = NULL;
+    bank_init(&player->bank);
     return player;
 }
 void free_player (Player* player) {
+    bank_free_patches(&player->bank);
     free(player);
 }
 
@@ -111,8 +112,15 @@ void play_sequence (Player* player, Sequence* seq) {
     player->ticks_to_event = seq->events[0].time;
     player->done = 0;
 }
-void set_bank (Player* player, Bank* bank) {
-    player->bank = bank;
+
+void load_config (Player* player, const char* filename) {
+    bank_load_config(&player->bank, filename);
+}
+void load_patch (Player* player, uint8 index, const char* filename) {
+    bank_load_patch(&player->bank, index, filename);
+}
+void load_drum (Player* player, uint8 index, const char* filename) {
+    bank_load_drum(&player->bank, index, filename);
 }
 
 void do_event (Player* player, Event* event) {
@@ -150,19 +158,17 @@ void do_event (Player* player, Event* event) {
                 v->envelope_value = 0;
                  // Decide which patch sample we're using
                 Channel* ch = &player->channels[v->channel];
-                if (player->bank) {
-                    Patch* patch = v->channel == 9
-                        ? player->bank->drums[v->note]
-                        : player->bank->patches[ch->program];
-                    if (patch) {
-                        if (patch->note >= 0)
-                            v->note = patch->note;
-                        uint32 freq = get_freq(v->note << 8);
-                        for (uint8 i = 0; i < patch->n_samples; i++) {
-                            if (patch->samples[i].high_freq > freq) {
-                                v->sample_index = i;
-                                break;
-                            }
+                Patch* patch = v->channel == 9
+                    ? player->bank.drums[v->note]
+                    : player->bank.patches[ch->program];
+                if (patch) {
+                    if (patch->note >= 0)
+                        v->note = patch->note;
+                    uint32 freq = get_freq(v->note << 8);
+                    for (uint8 i = 0; i < patch->n_samples; i++) {
+                        if (patch->samples[i].high_freq > freq) {
+                            v->sample_index = i;
+                            break;
                         }
                     }
                 }
@@ -267,105 +273,103 @@ void get_audio (Player* player, uint8* buf_, int len) {
             }
             skip_delete_voice: { }
             Channel* ch = &player->channels[v->channel];
-            if (player->bank) {
-                Patch* patch = v->channel == 9
-                    ? player->bank->drums[v->note]
-                    : player->bank->patches[ch->program];
-                if (patch) {
-                    Sample* sample = &patch->samples[v->sample_index];
-                     // Account for pitch bend
-                    uint32 freq = get_freq(v->note * 256 + ch->pitch_bend / 16);
-                     // Do envelopes  TODO: fade to 0 at end
-                    uint32 rate = sample->envelope_rates[v->envelope_phase];
-                    uint32 target = sample->envelope_offsets[v->envelope_phase];
-                    if (target > v->envelope_value) {
-                        if (v->envelope_value + rate < target) {
-                            v->envelope_value += rate;
-                        }
-                        else if (v->envelope_phase == 5) {
-                            goto delete_voice;
-                        }
-                        else {
-                            v->envelope_value = target;
-                            if (v->envelope_phase != 2) {
-                                v->envelope_phase += 1;
-                            }
-                        }
+            Patch* patch = v->channel == 9
+                ? player->bank.drums[v->note]
+                : player->bank.patches[ch->program];
+            if (patch) {
+                Sample* sample = &patch->samples[v->sample_index];
+                 // Account for pitch bend
+                uint32 freq = get_freq(v->note * 256 + ch->pitch_bend / 16);
+                 // Do envelopes  TODO: fade to 0 at end
+                uint32 rate = sample->envelope_rates[v->envelope_phase];
+                uint32 target = sample->envelope_offsets[v->envelope_phase];
+                if (target > v->envelope_value) {
+                    if (v->envelope_value + rate < target) {
+                        v->envelope_value += rate;
                     }
-                    else {
-                        if (target + rate < v->envelope_value) {
-                            v->envelope_value -= rate;
-                        }
-                        else if (v->envelope_phase == 5 || target == 0) {
-                            goto delete_voice;
-                        }
-                        else {
-                            v->envelope_value = target;
-                            if (v->envelope_phase != 2) {
-                                v->envelope_phase += 1;
-                            }
-                        }
-                    }
-                     // Calculate new position
-                    uint64 next_pos;
-                    if (v->backwards) {
-                        next_pos = v->sample_pos - 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
-                    }
-                    else {
-                        next_pos = v->sample_pos + 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
-                    }
-                     // Loop
-                    if (sample->loop) {
-                        if (v->backwards) {
-                            if (next_pos <= sample->loop_start * 0x100000000LL) {
-                                v->backwards = 0;
-                                next_pos = 2 * sample->loop_start * 0x100000000LL - next_pos;
-                            }
-                        }
-                        else {
-                            if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
-                                if (sample->pingpong) {
-                                    v->backwards = 1;
-                                    next_pos = 2 * sample->loop_end * 0x100000000LL - next_pos;
-                                }
-                                else {
-                                    next_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
-                                }
-                            }
-                        }
-                    }
-                    else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
+                    else if (v->envelope_phase == 5) {
                         goto delete_voice;
                     }
-                     // Linear interpolation.  TODO: is always +1 the right thing?
-                    int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
-                    samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
-                     // Volume calculation.  Is there a better way to do this?
-                    uint64 envelope_volume = v->envelope_value / (0xff << 15);
-                    uint32 volume = (uint32)vols[patch->volume]
-                                  * vols[ch->volume] / 65535
-                                  * vols[ch->expression] / 65535
-                                  * vols[v->velocity] / 65535
-                                  * vols[envelope_volume] / 65535;
-                    uint64 val = samp / 0x100000000LL * volume / 65535;
-                    left += val * (64 + ch->pan) / 64;
-                    right += val * (64 - ch->pan) / 64;
-                     // Move position
-                    v->sample_pos = next_pos;
-                    continue;
+                    else {
+                        v->envelope_value = target;
+                        if (v->envelope_phase != 2) {
+                            v->envelope_phase += 1;
+                        }
+                    }
                 }
+                else {
+                    if (target + rate < v->envelope_value) {
+                        v->envelope_value -= rate;
+                    }
+                    else if (v->envelope_phase == 5 || target == 0) {
+                        goto delete_voice;
+                    }
+                    else {
+                        v->envelope_value = target;
+                        if (v->envelope_phase != 2) {
+                            v->envelope_phase += 1;
+                        }
+                    }
+                }
+                 // Calculate new position
+                uint64 next_pos;
+                if (v->backwards) {
+                    next_pos = v->sample_pos - 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                }
+                else {
+                    next_pos = v->sample_pos + 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                }
+                 // Loop
+                if (sample->loop) {
+                    if (v->backwards) {
+                        if (next_pos <= sample->loop_start * 0x100000000LL) {
+                            v->backwards = 0;
+                            next_pos = 2 * sample->loop_start * 0x100000000LL - next_pos;
+                        }
+                    }
+                    else {
+                        if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
+                            if (sample->pingpong) {
+                                v->backwards = 1;
+                                next_pos = 2 * sample->loop_end * 0x100000000LL - next_pos;
+                            }
+                            else {
+                                next_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
+                            }
+                        }
+                    }
+                }
+                else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
+                    goto delete_voice;
+                }
+                 // Linear interpolation.  TODO: is always +1 the right thing?
+                int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
+                samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
+                 // Volume calculation.  Is there a better way to do this?
+                uint64 envelope_volume = v->envelope_value / (0xff << 15);
+                uint32 volume = (uint32)vols[patch->volume]
+                              * vols[ch->volume] / 65535
+                              * vols[ch->expression] / 65535
+                              * vols[v->velocity] / 65535
+                              * vols[envelope_volume] / 65535;
+                uint64 val = samp / 0x100000000LL * volume / 65535;
+                left += val * (64 + ch->pan) / 64;
+                right += val * (64 - ch->pan) / 64;
+                 // Move position
+                v->sample_pos = next_pos;
             }
-             // No bank or no patch
-             // Loop
-            v->sample_pos %= 0x100000000LL;
-             // Add value
-            int32 sign = v->sample_pos < 0x80000000LL ? -1 : 1;
-            uint32 val = sign * v->velocity * ch->volume * ch->expression / (32*127);
-            left += val;
-            right += val;
-             // Move position
-            uint32 freq = get_freq(v->note << 8);
-            v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
+            else { // No patch
+                 // Loop
+                v->sample_pos %= 0x100000000LL;
+                 // Add value
+                int32 sign = v->sample_pos < 0x80000000LL ? -1 : 1;
+                uint32 val = sign * v->velocity * ch->volume * ch->expression / (32*127);
+                left += val;
+                right += val;
+                 // Move position
+                uint32 freq = get_freq(v->note << 8);
+                v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
+            }
         }
         buf[i].l = left > 32767 ? 32767 : left < -32768 ? -32768 : left;
         buf[i].r = right > 32767 ? 32767 : right < -32768 ? -32768 : right;

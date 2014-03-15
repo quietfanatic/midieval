@@ -5,7 +5,7 @@ use Cwd qw(realpath);
 
  # Sample rules
 
-my @objects = qw(events main midi patches player);
+my @objects = qw(events main_sdl midi_files patch_files player);
 my @includes = qw();
 
 sub cc_rule {

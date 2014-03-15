@@ -2,17 +2,28 @@
 #define MIDIVAL_PLAYER_H
 
 #include "events.h"
-#include "patch_files.h"
 
 typedef struct Player Player;
 
+ // Core API
+
+ // Allocate new player
 Player* new_player ();
-void reset_player (Player*);
+ // Load a .cfg containing patch names (nothing complicated please)
+void load_config (Player*, const char* filename);
+ // Set the sequence currently being played (use load_midi)
+void play_sequence (Player*, Sequence*);
+ // Get this many bytes of audio.  len must be a multiple of 4
+void get_audio (Player*, uint8* buf, int len);
+ // Delete a player
 void free_player (Player*);
 
-void play_sequence (Player*, Sequence*);
-void set_bank (Player*, Bank*);
 
-void get_audio (Player*, uint8* buf, int len);
+ // Things you probably won't need
 
+ // Reset player to initial state
+void reset_player (Player*);
+ // Load an individual patch from a file
+void load_patch (Player*, uint8 index, const char* filename);
+void load_drum (Player*, uint8 drum, const char* filename);
 #endif

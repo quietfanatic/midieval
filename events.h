@@ -53,7 +53,7 @@ typedef struct Event {
 } Event;
 
 typedef struct Timed_Event {
-    uint32 time;  // In ticks
+    uint32 time;  // Absolute time in ticks
     Event event;
 } Timed_Event;
 

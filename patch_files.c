@@ -70,7 +70,7 @@ static void require (FILE* f, uint32 size, const char* str) {
     }
 }
 
-Patch* load_patch (const char* filename) {
+Patch* _load_patch (const char* filename) {
     FILE* f = fopen(filename, "r");
     if (!f) {
         printf("Couldn't open %s for reading: %s\n", filename, strerror(errno));
@@ -223,31 +223,33 @@ void print_patch (Patch* pat) {
     printf("}\n");
 }
 
-Bank* new_bank () {
-    Bank* bank = malloc(sizeof(Bank));
+void bank_init (Bank* bank) {
     for (uint8 i = 0; i < 128; i++) {
         bank->patches[i] = NULL;
+        bank->drums[i] = NULL;
     }
-    return bank;
 }
-void set_patch (Bank* bank, uint8 instrument, const char* filename) {
+void bank_load_patch (Bank* bank, uint8 instrument, const char* filename) {
     if (instrument < 128) {
-        bank->patches[instrument] = load_patch(filename);
+        bank->patches[instrument] = _load_patch(filename);
     }
 }
-void set_drum (Bank* bank, uint8 instrument, const char* filename) {
+void bank_load_drum (Bank* bank, uint8 instrument, const char* filename) {
     if (instrument < 128) {
-        bank->drums[instrument] = load_patch(filename);
+        bank->drums[instrument] = _load_patch(filename);
     }
 }
-void free_bank (Bank* bank) {
+void bank_free_patches (Bank* bank) {
     for (uint8 i = 0; i < 128; i++) {
-        if (bank->patches[i])
+        if (bank->patches[i]) {
             free_patch(bank->patches[i]);
-        if (bank->drums[i])
+            bank->patches[i] = NULL;
+        }
+        if (bank->drums[i]) {
             free_patch(bank->drums[i]);
+            bank->drums[i] = NULL;
+        }
     }
-    free(bank);
 }
 
 char* read_word (char** p, char* end) {
@@ -307,7 +309,7 @@ void line_break (char** p, char* end) {
     line_begin = *p;
 }
 
-Bank* load_bank (const char* cfg) {
+void bank_load_config (Bank* bank, const char* cfg) {
     int32 prefix = -1;
     for (int32 i = 0; cfg[i]; i++) {
         if (cfg[i] == '/') prefix = i + 1;
@@ -334,7 +336,6 @@ Bank* load_bank (const char* cfg) {
     line = 1;
     line_begin = dat;
 
-    Bank* bank = new_bank();
     uint32 bank_num = 0;
     int drumset = 0;
 
@@ -372,7 +373,7 @@ Bank* load_bank (const char* cfg) {
                 memcpy(filename, cfg, prefix);
                 memcpy(filename + prefix, word, p - word);
                 memcpy(filename + prefix + (p - word), ".pat", 5);
-                Patch* patch = load_patch(filename);
+                Patch* patch = _load_patch(filename);
                 if (drumset) {
                     if (bank->drums[program]) {
                         free_patch(bank->drums[program]);
@@ -432,5 +433,4 @@ Bank* load_bank (const char* cfg) {
         skip_ws(&p, end);
     }
     free(dat);
-    return bank;
 }

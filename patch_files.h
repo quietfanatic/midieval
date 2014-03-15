@@ -36,7 +36,7 @@ typedef struct Patch {
     Sample* samples;
 } Patch;
 
-Patch* load_patch (const char* filename);
+Patch* _load_patch (const char* filename);
 void free_patch (Patch*);
 
 void print_patch (Patch*);
@@ -46,11 +46,10 @@ typedef struct Bank {
     Patch* drums [128];
 } Bank;
 
-Bank* new_bank ();
-void set_patch (Bank*, uint8 instrument, const char* filename);
-void set_drum (Bank*, uint8 instrument, const char* filename);
-void free_bank (Bank*);
-
-Bank* load_bank (const char* cfg_filename);
+void bank_init (Bank*);
+void bank_load_config (Bank*, const char* filename);
+void bank_load_patch (Bank*, uint8 instrument, const char* filename);
+void bank_load_drum (Bank*, uint8 instrument, const char* filename);
+void bank_free_patches (Bank*);
 
 #endif
