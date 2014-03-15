@@ -2,7 +2,7 @@
 #define MIDIVAL_PLAYER_H
 
 #include "events.h"
-#include "patches.h"
+#include "patch_files.h"
 
 typedef struct Player Player;
 

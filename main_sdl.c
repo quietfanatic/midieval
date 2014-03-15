@@ -1,9 +1,9 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_audio.h>
-#include "midi.h"
+#include "midi_files.h"
 #include "player.h"
-#include "patches.h"
+#include "patch_files.h"
 
 int main (int argc, char** argv) {
     if (SDL_Init(SDL_INIT_AUDIO) < 0) {

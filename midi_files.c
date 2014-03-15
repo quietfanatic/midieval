@@ -1,4 +1,4 @@
-#include "midi.h"
+#include "midi_files.h"
 
 #include <errno.h>
 #include <stdlib.h>

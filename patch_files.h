@@ -1,5 +1,5 @@
-#ifndef HAVE_MIDIVAL_PATCHES_H
-#define HAVE_MIDIVAL_PATCHES_H
+#ifndef HAVE_MIDIVAL_PATCHE_FILES_H
+#define HAVE_MIDIVAL_PATCHE_FILES_H
 
 #include <inttypes.h>
 

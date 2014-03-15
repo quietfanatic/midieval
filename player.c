@@ -1,5 +1,5 @@
 #include "player.h"
-#include "midi.h"
+#include "midi_files.h"
 
 #define SAMPLE_RATE 48000
 

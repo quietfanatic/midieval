@@ -1,5 +1,6 @@
 #ifndef MIDIVAL_EVENTS_H
 #define MIDIVAL_EVENTS_H
+
 #include <inttypes.h>
 
 typedef int8_t int8;

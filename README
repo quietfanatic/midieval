@@ -12,7 +12,6 @@ TODO:
  ☑ sample envelopes
  ☐ figure out more precise envelope semantics
  ☐ envelope controllers
- ☐ volumes should be exponential
  ☑ pitch bend
  ☐ pitch bend range
  ☐ verify panning calculations

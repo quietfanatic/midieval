@@ -1,5 +1,5 @@
-#ifndef MIDIVAL_MIDI_H
-#define MIDIVAL_MIDI_H
+#ifndef MIDIVAL_MIDI_FILES_H
+#define MIDIVAL_MIDI_FILES_H
 
 #include "events.h"
 
