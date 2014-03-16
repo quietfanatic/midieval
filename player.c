@@ -339,10 +339,11 @@ void get_audio (Player* player, uint8* buf_, int len) {
                         }
                     }
                 }
-                else if (v->sample_pos >= sample->data_size * 0x100000000LL) {
+                 // With interpolation, the length of a sample is one minus the number of points
+                else if (v->sample_pos >= sample->data_size * 0x100000000LL - 1) {
                     goto delete_voice;
                 }
-                 // Linear interpolation.  TODO: is always +1 the right thing?
+                 // Linear interpolation.
                 int64 samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                 samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
                  // Volume calculation.  Is there a better way to do this?
