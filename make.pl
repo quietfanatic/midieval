@@ -5,7 +5,7 @@ use Cwd qw(realpath);
 
  # Sample rules
 
-my @objects = qw(events main_sdl midi_files patch_files player);
+my @objects = qw(events midi_files patch_files player);
 my @includes = qw();
 
 sub cc_rule {
@@ -24,11 +24,14 @@ sub ld_rule {
 for (@objects) {
     cc_rule "$_.o", "$_.c";
 }
-ld_rule 'midival', [map "$_.o", @objects];
+cc_rule 'main_sdl.o', 'main_sdl.c';
+cc_rule 'main_profile.o', 'main_profile.c';
+ld_rule 'midival', ['main_profile.o', map "$_.o", @objects];
+ld_rule 'midival_profile', ['main_profile.o', map "$_.o", @objects];
 
 rule 'clean', [], sub { unlink 'midival', glob '*.o'; };
 
-defaults 'midival';
+defaults 'midival', 'midival_profile';
 
  # Automatically glean subdeps from #includes
 subdep sub {
