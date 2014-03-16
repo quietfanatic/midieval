@@ -112,6 +112,10 @@ void play_sequence (Player* player, Sequence* seq) {
     player->done = 0;
 }
 
+int currently_playing (Player* player) {
+    return player->seq && !player->done;
+}
+
 void load_config (Player* player, const char* filename) {
     bank_load_config(&player->bank, filename);
 }

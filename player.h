@@ -15,6 +15,8 @@ void load_config (Player*, const char* filename);
 void play_sequence (Player*, Sequence*);
  // Get this many bytes of audio.  len must be a multiple of 4
 void get_audio (Player*, uint8* buf, int len);
+ // 0 if either no sequence was given or the sequence is done
+int currently_playing (Player*);
  // Delete a player
 void free_player (Player*);
 
