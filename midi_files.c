@@ -171,6 +171,7 @@ Sequence* load_midi (const char* filename) {
      // Now sort the events by time
     qsort(seq->events, seq->n_events, sizeof(Timed_Event), cmp_event);
 
+    free(data);
     return seq;
   premature_end:
     fprintf(stderr, "Premature end of track while parsing event\n");
