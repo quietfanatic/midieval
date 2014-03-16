@@ -245,12 +245,12 @@ void get_audio (Player* player, uint8* buf_, int len) {
     }
     for (int i = 0; i < len; i++) {
          // Advance event timeline
-        if (!--player->samples_to_tick) {
-            while (!player->ticks_to_event) {
+        if (!player->done && !--player->samples_to_tick) {
+            while (!player->done && !player->ticks_to_event) {
                 do_event(player, &player->current->event);
                 uint32 old_time = player->current->time;
                 player->current += 1;
-                if (player->current == seq->events + seq->n_events) {
+                if (player->current >= seq->events + seq->n_events) {
                     player->done = 1;
                 }
                 else {

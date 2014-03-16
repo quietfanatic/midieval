@@ -168,6 +168,8 @@ Sequence* load_midi (const char* filename) {
         fprintf(stderr, "Warning: extra junk at end of MIDI file.\n");
     }
 
+     // Don't really need to do this, but it helps valgrind analysis
+    seq->events = realloc(seq->events, seq->n_events * sizeof(Timed_Event));
      // Now sort the events by time
     qsort(seq->events, seq->n_events, sizeof(Timed_Event), cmp_event);
 
