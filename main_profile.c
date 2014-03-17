@@ -11,6 +11,7 @@ int main (int argc, char** argv) {
     load_config(player, "/usr/local/share/eawpats/gravis.cfg");
     Sequence* seq = load_midi(argc == 2 ? argv[1] : "test.mid");
     play_sequence(player, seq);
+    printf("dat: %p, player: %p, seq: %p\n", dat, player, seq);
 
     clock_t start = clock();
     while (currently_playing(player)) {

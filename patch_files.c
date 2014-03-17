@@ -197,12 +197,12 @@ void print_patch (Patch* pat) {
         printf("    root_freq: %u\n", pat->samples[i].root_freq);
         printf("    loop_start: %u\n", pat->samples[i].loop_start);
         printf("    loop_end: %u\n", pat->samples[i].loop_end);
-        printf("    envelope_rates: %hhu %hhu %hhu %hhu %hhu %hhu\n",
+        printf("    envelope_rates: %u %u %u %u %u %u\n",
             pat->samples[i].envelope_rates[0], pat->samples[i].envelope_rates[1],
             pat->samples[i].envelope_rates[2], pat->samples[i].envelope_rates[3],
             pat->samples[i].envelope_rates[4], pat->samples[i].envelope_rates[5]
         );
-        printf("    envelope_offsets: %hhu %hhu %hhu %hhu %hhu %hhu\n",
+        printf("    envelope_offsets: %u %u %u %u %u %u\n",
             pat->samples[i].envelope_offsets[0], pat->samples[i].envelope_offsets[1],
             pat->samples[i].envelope_offsets[2], pat->samples[i].envelope_offsets[3],
             pat->samples[i].envelope_offsets[4], pat->samples[i].envelope_offsets[5]

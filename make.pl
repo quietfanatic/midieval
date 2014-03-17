@@ -3,6 +3,8 @@ use lib do {__FILE__ =~ /^(.*)[\/\\]/; ($1||'.')};
 use MakePl;
 use Cwd qw(realpath);
 
+$ENV{CC} //= 'gcc';
+
  # Sample rules
 
 my @objects = qw(events midi_files patch_files player);
@@ -11,13 +13,13 @@ my @includes = qw();
 sub cc_rule {
     my ($to, $from) = @_;
     rule $to, $from, sub {
-        run 'gcc', $from, qw(-c -std=c99 -Wall -ggdb -o), $to;
+        run $ENV{CC}, $from, qw(-c -std=c99 -Wall -ggdb -o), $to;
     };
 }
 sub ld_rule {
     my ($to, $from) = @_;
     rule $to, $from, sub {
-        run 'gcc', @$from, qw(-lSDL2 -lm -o), $to;
+        run $ENV{CC}, @$from, qw(-lSDL2 -lm -o), $to;
     };
 }
 
