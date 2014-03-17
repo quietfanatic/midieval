@@ -26,7 +26,7 @@ for (@objects) {
 }
 cc_rule 'main_sdl.o', 'main_sdl.c';
 cc_rule 'main_profile.o', 'main_profile.c';
-ld_rule 'midival', ['main_profile.o', map "$_.o", @objects];
+ld_rule 'midival', ['main_sdl.o', map "$_.o", @objects];
 ld_rule 'midival_profile', ['main_profile.o', map "$_.o", @objects];
 
 rule 'clean', [], sub { unlink 'midival', glob '*.o'; };
