@@ -3,6 +3,6 @@
 
 #include "events.h"
 
-Sequence* load_midi (const char* filename);
+MDV_Sequence* mdv_load_midi (const char* filename);
 
 #endif

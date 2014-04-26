@@ -3,53 +3,46 @@
 
 #include <inttypes.h>
 
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-
-typedef struct Sample {
+typedef struct MDV_Sample {
      // in milliHz
-    uint32 low_freq;
-    uint32 high_freq;
-    uint32 root_freq;
+    uint32_t low_freq;
+    uint32_t high_freq;
+    uint32_t root_freq;
      // in samples
-    uint32 loop_start;
-    uint32 loop_end;
-    uint32 envelope_rates [6];
-    uint32 envelope_offsets [6];
-    uint8 pan;
-    uint8 loop;
-    uint8 pingpong;
-    uint16 sample_rate;
-    uint32 data_size;
-    int16* data;
-} Sample;
+    uint32_t loop_start;
+    uint32_t loop_end;
+    uint32_t envelope_rates [6];
+    uint32_t envelope_offsets [6];
+    uint8_t pan;
+    uint8_t loop;
+    uint8_t pingpong;
+    uint16_t sample_rate;
+    uint32_t data_size;
+    int16_t* data;
+} MDV_Sample;
 
-typedef struct Patch {
+typedef struct MDV_Patch {
      // TODO: do we need any more information?
-    uint16 volume;
-    int8 note;
-    uint8 n_samples;
-    Sample* samples;
-} Patch;
+    uint16_t volume;
+    int8_t note;
+    uint8_t n_samples;
+    MDV_Sample* samples;
+} MDV_Patch;
 
-Patch* _load_patch (const char* filename);
-void free_patch (Patch*);
+MDV_Patch* _mdv_load_patch (const char* filename);
+void mdv_free_patch (MDV_Patch*);
 
-void print_patch (Patch*);
+void mdv_print_patch (MDV_Patch*);
 
-typedef struct Bank {
-    Patch* patches [128];
-    Patch* drums [128];
-} Bank;
+typedef struct MDV_Bank {
+    MDV_Patch* patches [128];
+    MDV_Patch* drums [128];
+} MDV_Bank;
 
-void bank_init (Bank*);
-void bank_load_config (Bank*, const char* filename);
-void bank_load_patch (Bank*, uint8 instrument, const char* filename);
-void bank_load_drum (Bank*, uint8 instrument, const char* filename);
-void bank_free_patches (Bank*);
+void mdv_bank_init (MDV_Bank*);
+void mdv_bank_load_config (MDV_Bank*, const char* filename);
+void mdv_bank_load_patch (MDV_Bank*, uint8_t instrument, const char* filename);
+void mdv_bank_load_drum (MDV_Bank*, uint8_t instrument, const char* filename);
+void mdv_bank_free_patches (MDV_Bank*);
 
 #endif

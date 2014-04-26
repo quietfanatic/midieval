@@ -17,7 +17,7 @@ enum Sampling_Mode_Bits {
     CLAMPED_RELEASE = 0x80
 };
 
-static uint8 read_u8 (FILE* f) {
+static uint8_t read_u8 (FILE* f) {
     int c = fgetc(f);
     if (c == EOF) {
         printf("File too short.\n");
@@ -26,22 +26,22 @@ static uint8 read_u8 (FILE* f) {
     return c;
 }
 
-static uint16 read_u16 (FILE* f) {
-    uint16 r = read_u8(f);
+static uint16_t read_u16 (FILE* f) {
+    uint16_t r = read_u8(f);
     r |= read_u8(f) << 8;
     return r;
 }
 
-static uint32 read_u32 (FILE* f) {
-    uint32 r = read_u8(f);
+static uint32_t read_u32 (FILE* f) {
+    uint32_t r = read_u8(f);
     r |= read_u8(f) << 8;
     r |= read_u8(f) << 16;
     r |= read_u8(f) << 24;
     return r;
 }
 
-static uint8* read_size (FILE* f, uint32 size) {
-    uint8* data = malloc(size);
+static uint8_t* read_size (FILE* f, uint32_t size) {
+    uint8_t* data = malloc(size);
     int got = fread(data, 1, size, f);
     if (got != size) {
         free(data);
@@ -51,8 +51,8 @@ static uint8* read_size (FILE* f, uint32 size) {
     return data;
 }
 
-static void skip (FILE* f, uint32 size) {
-    for (uint32 i = 0; i < size; i++) {
+static void skip (FILE* f, uint32_t size) {
+    for (uint32_t i = 0; i < size; i++) {
         if (fgetc(f) == EOF) {
             printf("File too short.\n");
             exit(1);
@@ -60,17 +60,17 @@ static void skip (FILE* f, uint32 size) {
     }
 }
 
-static void require (FILE* f, uint32 size, const char* str) {
+static void require (FILE* f, uint32_t size, const char* str) {
     for (const char* p = str; p < str+size; p++) {
-        uint8 got = read_u8(f);
-        if (got != (uint8)*p) {
-            printf("File is incorrect: expected 0x%02hhX but got 0x%02hhX\n", (uint8)*p, got);
+        uint8_t got = read_u8(f);
+        if (got != (uint8_t)*p) {
+            printf("File is incorrect: expected 0x%02hhX but got 0x%02hhX\n", (uint8_t)*p, got);
             exit(1);
         }
     }
 }
 
-Patch* _load_patch (const char* filename) {
+MDV_Patch* _mdv_load_patch (const char* filename) {
     FILE* f = fopen(filename, "r");
     if (!f) {
         printf("Couldn't open %s for reading: %s\n", filename, strerror(errno));
@@ -87,7 +87,7 @@ Patch* _load_patch (const char* filename) {
     skip(f, 1);  // Voices?
     skip(f, 1);  // Channels?
     skip(f, 2);  // Waveforms?
-    Patch* pat = malloc(sizeof(Patch));
+    MDV_Patch* pat = malloc(sizeof(MDV_Patch));
     pat->samples = NULL;
     pat->note = -1;
     pat->volume = read_u16(f);
@@ -115,11 +115,11 @@ Patch* _load_patch (const char* filename) {
     skip(f, 4);  // Layer size
     pat->n_samples = read_u8(f);
     skip(f, 40);  // Reserved
-    pat->samples = malloc(pat->n_samples * sizeof(Sample));
-    for (uint8 i = 0; i < pat->n_samples; i++) {
+    pat->samples = malloc(pat->n_samples * sizeof(MDV_Sample));
+    for (uint8_t i = 0; i < pat->n_samples; i++) {
         pat->samples[i].data = NULL;
     }
-    for (uint8 i = 0; i < pat->n_samples; i++) {
+    for (uint8_t i = 0; i < pat->n_samples; i++) {
         skip(f, 7);  // Wave name
         if (read_u8(f) != 0) {
 //            printf("Warning: NYI non-zero fractions byte (?) in %s\n", filename);
@@ -138,25 +138,25 @@ Patch* _load_patch (const char* filename) {
          // These formulas are pretty much stolen from TiMidity,
          //  which uses 15:15 (?) fixed-point format, so we'll just
          //  go ahead and copy that for now.
-        for (uint32 j = 0; j < 6; j++) {
-            uint8 byte = read_u8(f);
-            uint32 val = (uint32)(byte & 0x3f) << (3 * (3 - (byte >> 6)));
+        for (uint32_t j = 0; j < 6; j++) {
+            uint8_t byte = read_u8(f);
+            uint32_t val = (uint32_t)(byte & 0x3f) << (3 * (3 - (byte >> 6)));
             pat->samples[i].envelope_rates[j] = (val * 44100 / 48000) << 10;
         }
-        for (uint32 j = 0; j < 6; j++) {
+        for (uint32_t j = 0; j < 6; j++) {
             pat->samples[i].envelope_offsets[j] = read_u8(f) << 22;
         }
         skip(f, 6);  // Tremolo and vibrato stuff
-        uint8 sampling_modes = read_u8(f);
+        uint8_t sampling_modes = read_u8(f);
         skip(f, 4);  // Scale(?) stuff
         skip(f, 36);  // Reserved
-        pat->samples[i].data = (int16*)read_size(f, pat->samples[i].data_size * 2);
+        pat->samples[i].data = (int16_t*)read_size(f, pat->samples[i].data_size * 2);
         if (!(sampling_modes & BITS16)) {
             printf("8-bit samples NYI\n");
             goto fail;
         }
         if (sampling_modes & UNSIGNED) {
-            for (uint32 j = 0; j < pat->samples[i].data_size; j++) {
+            for (uint32_t j = 0; j < pat->samples[i].data_size; j++) {
                 pat->samples[i].data[j] ^= 0x8000;
             }
         }
@@ -172,13 +172,13 @@ Patch* _load_patch (const char* filename) {
 
   fail:
     fclose(f);
-    free_patch(pat);
+    mdv_free_patch(pat);
     exit(1);
 }
 
-void free_patch (Patch* pat) {
+void mdv_free_patch (MDV_Patch* pat) {
     if (pat->samples) {
-        for (uint32 i = 0; i < pat->n_samples; i++) {
+        for (uint32_t i = 0; i < pat->n_samples; i++) {
             if (pat->samples[i].data)
                 free(pat->samples[i].data);
         }
@@ -187,10 +187,10 @@ void free_patch (Patch* pat) {
     free(pat);
 }
 
-void print_patch (Patch* pat) {
+void mdv_print_patch (MDV_Patch* pat) {
     printf("Patch: {\n");
     printf("  volume: %hu\n", pat->volume);
-    for (uint8 i = 0; i < pat->n_samples; i++) {
+    for (uint8_t i = 0; i < pat->n_samples; i++) {
         printf("  Sample: {\n");
         printf("    low_freq: %u\n", pat->samples[i].low_freq);
         printf("    high_freq: %u\n", pat->samples[i].high_freq);
@@ -223,43 +223,43 @@ void print_patch (Patch* pat) {
     printf("}\n");
 }
 
-void bank_init (Bank* bank) {
-    for (uint8 i = 0; i < 128; i++) {
+void mdv_bank_init (MDV_Bank* bank) {
+    for (uint8_t i = 0; i < 128; i++) {
         bank->patches[i] = NULL;
         bank->drums[i] = NULL;
     }
 }
-void bank_load_patch (Bank* bank, uint8 instrument, const char* filename) {
+void mdv_bank_load_patch (MDV_Bank* bank, uint8_t instrument, const char* filename) {
     if (instrument < 128) {
-        bank->patches[instrument] = _load_patch(filename);
+        bank->patches[instrument] = _mdv_load_patch(filename);
     }
 }
-void bank_load_drum (Bank* bank, uint8 instrument, const char* filename) {
+void mdv_bank_load_drum (MDV_Bank* bank, uint8_t instrument, const char* filename) {
     if (instrument < 128) {
-        bank->drums[instrument] = _load_patch(filename);
+        bank->drums[instrument] = _mdv_load_patch(filename);
     }
 }
-void bank_free_patches (Bank* bank) {
-    for (uint8 i = 0; i < 128; i++) {
+void mdv_bank_free_patches (MDV_Bank* bank) {
+    for (uint8_t i = 0; i < 128; i++) {
         if (bank->patches[i]) {
-            free_patch(bank->patches[i]);
+            mdv_free_patch(bank->patches[i]);
             bank->patches[i] = NULL;
         }
         if (bank->drums[i]) {
-            free_patch(bank->drums[i]);
+            mdv_free_patch(bank->drums[i]);
             bank->drums[i] = NULL;
         }
     }
 }
 
-char* read_word (char** p, char* end) {
+static char* read_word (char** p, char* end) {
     char* r = *p;
     while (*p != end && !isspace(**p) && **p != '=' && **p != '#') {
         (*p)++;
     }
     return r;
 }
-int32 read_i32 (char** p, char* end) {
+static int32_t read_i32 (char** p, char* end) {
     if (*p == end) {
         fprintf(stderr, "Parse error: expected number but got EOF\n");
         exit(1);
@@ -268,7 +268,7 @@ int32 read_i32 (char** p, char* end) {
         fprintf(stderr, "Parse error: expected number but got '%c'\n", **p);
         exit(1);
     }
-    int32 r = 0;
+    int32_t r = 0;
     while (*p != end && isdigit(**p)) {
         r *= 10;
         r += **p - '0';
@@ -276,7 +276,7 @@ int32 read_i32 (char** p, char* end) {
     }
     return r;
 }
-void require_char (char** p, char* end, char c) {
+static void require_char (char** p, char* end, char c) {
     if (*p == end) {
         fprintf(stderr, "Parse error: expected '%c' but got EOF\n", c);
         exit(1);
@@ -287,7 +287,7 @@ void require_char (char** p, char* end, char c) {
     }
     (*p)++;
 }
-void skip_ws (char** p, char* end) {
+static void skip_ws (char** p, char* end) {
     while (*p != end && (**p == ' ' || **p == '\t'))
         (*p)++;
     if (*p != end && **p == '#') {
@@ -296,22 +296,22 @@ void skip_ws (char** p, char* end) {
         }
     }
 }
-int cmp_strs (char* a, size_t as, const char* b, size_t bs) {
+static int cmp_strs (char* a, size_t as, const char* b, size_t bs) {
     return as == bs && strncmp(a, b, as) == 0;
 }
 
-uint32 line;
-char* line_begin;
+static uint32_t line;
+static char* line_begin;
 
-void line_break (char** p, char* end) {
+static void line_break (char** p, char* end) {
     require_char(p, end, '\n');
     line += 1;
     line_begin = *p;
 }
 
-void bank_load_config (Bank* bank, const char* cfg) {
-    int32 prefix = -1;
-    for (int32 i = 0; cfg[i]; i++) {
+void mdv_bank_load_config (MDV_Bank* bank, const char* cfg) {
+    int32_t prefix = -1;
+    for (int32_t i = 0; cfg[i]; i++) {
         if (cfg[i] == '/') prefix = i + 1;
     }
     FILE* f = fopen(cfg, "r");
@@ -336,7 +336,7 @@ void bank_load_config (Bank* bank, const char* cfg) {
     line = 1;
     line_begin = dat;
 
-    uint32 bank_num = 0;
+    uint32_t bank_num = 0;
     int drumset = 0;
 
     skip_ws(&p, end);
@@ -361,7 +361,7 @@ void bank_load_config (Bank* bank, const char* cfg) {
             line_break(&p, end);
         }
         else if (isdigit(*p)) {
-            int32 program = read_i32(&p, end);
+            int32_t program = read_i32(&p, end);
             if (program < 0 || program > 127) {
                 fprintf(stderr, "Invalid program number: %d at %u:%lu (%lu)\n", program, line, p - line_begin, p - dat);
                 exit(1);
@@ -373,16 +373,16 @@ void bank_load_config (Bank* bank, const char* cfg) {
                 memcpy(filename, cfg, prefix);
                 memcpy(filename + prefix, word, p - word);
                 memcpy(filename + prefix + (p - word), ".pat", 5);
-                Patch* patch = _load_patch(filename);
+                MDV_Patch* patch = _mdv_load_patch(filename);
                 if (drumset) {
                     if (bank->drums[program]) {
-                        free_patch(bank->drums[program]);
+                        mdv_free_patch(bank->drums[program]);
                     }
                     bank->drums[program] = patch;
                 }
                 else {
                     if (bank->patches[program]) {
-                        free_patch(bank->patches[program]);
+                        mdv_free_patch(bank->patches[program]);
                     }
                     bank->patches[program] = patch;
                 }
@@ -394,11 +394,11 @@ void bank_load_config (Bank* bank, const char* cfg) {
                     require_char(&p, end, '=');
                     skip_ws(&p, end);
                     if (cmp_strs(option, p - option, "amp", 3)) {
-                        int32 percent = read_i32(&p, end);
+                        int32_t percent = read_i32(&p, end);
                         patch->volume = patch->volume * percent / 100;
                     }
                     else if (cmp_strs(option, p - option, "note", 4)) {
-                        int32 note = read_i32(&p, end);
+                        int32_t note = read_i32(&p, end);
                         if (note >= 0 && note <= 127) {
                             patch->note = note;
                         }

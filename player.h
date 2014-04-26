@@ -3,29 +3,30 @@
 
 #include "events.h"
 
-typedef struct Player Player;
+ // TODO: publicize this for serializability and such
+typedef struct MDV_Player MDV_Player;
 
  // Core API
 
  // Allocate new player
-Player* new_player ();
+MDV_Player* mdv_new_player ();
  // Load a .cfg containing patch names (nothing complicated please)
-void load_config (Player*, const char* filename);
+void mdv_load_config (MDV_Player*, const char* filename);
  // Set the sequence currently being played (use load_midi)
-void play_sequence (Player*, Sequence*);
+void mdv_play_sequence (MDV_Player*, MDV_Sequence*);
  // Get this many bytes of audio.  len must be a multiple of 4
-void get_audio (Player*, uint8* buf, int len);
+void mdv_get_audio (MDV_Player*, uint8_t* buf, int len);
  // 0 if either no sequence was given or the sequence is done
-int currently_playing (Player*);
+int mdv_currently_playing (MDV_Player*);
  // Delete a player
-void free_player (Player*);
+void mdv_free_player (MDV_Player*);
 
 
  // Things you probably won't need
 
  // Reset player to initial state
-void reset_player (Player*);
+void mdV_reset_player (MDV_Player*);
  // Load an individual patch from a file
-void load_patch (Player*, uint8 index, const char* filename);
-void load_drum (Player*, uint8 drum, const char* filename);
+void mdv_load_patch (MDV_Player*, uint8_t index, const char* filename);
+void mdv_load_drum (MDV_Player*, uint8_t drum, const char* filename);
 #endif

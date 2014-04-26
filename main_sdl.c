@@ -10,10 +10,10 @@ int main (int argc, char** argv) {
     }
 
      // Set up player
-    Player* player = new_player();
-    load_config(player, "/usr/local/share/eawpats/gravis.cfg");
-    Sequence* seq = load_midi(argc == 2 ? argv[1] : "test.mid");
-    play_sequence(player, seq);
+    MDV_Player* player = mdv_new_player();
+    mdv_load_config(player, "/usr/local/share/eawpats/gravis.cfg");
+    MDV_Sequence* seq = mdv_load_midi(argc == 2 ? argv[1] : "test.mid");
+    mdv_play_sequence(player, seq);
 
      // Set up SDL audio
     SDL_AudioSpec spec;
@@ -21,7 +21,7 @@ int main (int argc, char** argv) {
     spec.format = AUDIO_S16;
     spec.channels = 2;
     spec.samples = 4096;
-    spec.callback = (void(*)(void*,uint8*,int))get_audio;
+    spec.callback = (void(*)(void*,uint8_t*,int))mdv_get_audio;
     spec.userdata = player;
     SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &spec, NULL, 0);
     if (dev == 0) {
@@ -34,8 +34,8 @@ int main (int argc, char** argv) {
     SDL_PauseAudioDevice(dev, 1);
 
      // Clean up
-    free_player(player);
-    free_sequence(seq);
+    mdv_free_player(player);
+    mdv_free_sequence(seq);
     SDL_Quit();
     return 0;
 }
