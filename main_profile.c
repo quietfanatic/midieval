@@ -1,8 +1,8 @@
 
 #include <time.h>
 #include <stdio.h>
-#include "midi_files.h"
-#include "player.h"
+
+#include "midival.h"
 
 uint8_t dat [4096 * 4];
 

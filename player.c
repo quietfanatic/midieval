@@ -1,5 +1,4 @@
-#include "player.h"
-#include "patch_files.h"
+#include "midival.h"
 
 #define SAMPLE_RATE 48000
 

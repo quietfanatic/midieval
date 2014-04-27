@@ -1,10 +1,9 @@
-#include "midi_files.h"
+#include "midival.h"
 
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "events.h"
 
 static uint32_t read_u32 (uint8_t* data) {
     return data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3];
