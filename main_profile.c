@@ -2,7 +2,7 @@
 #include <time.h>
 #include <stdio.h>
 
-#include "midival.h"
+#include "midieval.h"
 
 uint8_t dat [4096 * 4];
 

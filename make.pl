@@ -28,12 +28,12 @@ for (@objects) {
 }
 cc_rule 'main_sdl.o', 'main_sdl.c';
 cc_rule 'main_profile.o', 'main_profile.c';
-ld_rule 'midival', ['main_sdl.o', map "$_.o", @objects];
-ld_rule 'midival_profile', ['main_profile.o', map "$_.o", @objects];
+ld_rule 'midieval', ['main_sdl.o', map "$_.o", @objects];
+ld_rule 'midieval_profile', ['main_profile.o', map "$_.o", @objects];
 
-rule 'clean', [], sub { unlink 'midival', glob '*.o'; };
+rule 'clean', [], sub { unlink 'midieval', 'midieval_profile', glob '*.o'; };
 
-defaults 'midival', 'midival_profile';
+defaults 'midieval', 'midieval_profile';
 
  # Automatically glean subdeps from #includes
 subdep sub {

@@ -2,7 +2,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_audio.h>
 
-#include "midival.h"
+#include "midieval.h"
 
 int main (int argc, char** argv) {
     if (SDL_Init(SDL_INIT_AUDIO) < 0) {

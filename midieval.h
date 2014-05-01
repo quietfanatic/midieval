@@ -1,5 +1,5 @@
-#ifndef MIDIVAL_H
-#define MIDIVAL_H
+#ifndef MIDIEVAL_H
+#define MIDIEVAL_H
 
 #include <inttypes.h>
 
