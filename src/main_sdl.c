@@ -12,7 +12,7 @@ int main (int argc, char** argv) {
      // Set up player
     MDV_Player* player = mdv_new_player();
     mdv_load_config(player, "/usr/local/share/eawpats/gravis.cfg");
-    MDV_Sequence* seq = mdv_load_midi(argc == 2 ? argv[1] : "test.mid");
+    MDV_Sequence* seq = mdv_load_midi(argc == 2 ? argv[1] : "sample/test.mid");
     mdv_play_sequence(player, seq);
 
      // Set up SDL audio
