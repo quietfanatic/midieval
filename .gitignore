@@ -1,4 +1,4 @@
-midieval
-midieval_profile
-*.o
-*.mid
+/midieval_*
+/midieval_*
+/tmp
+/sample

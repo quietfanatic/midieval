@@ -1,19 +1,18 @@
 #!/usr/bin/perl
 use lib do {__FILE__ =~ /^(.*)[\/\\]/; ($1||'.')};
 use MakePl;
-use Cwd qw(realpath);
 
 $ENV{CC} //= 'gcc';
 
  # Sample rules
 
 my @objects = qw(events midi_files patch_files player);
-my @includes = qw();
+my @includes = qw(inc);
 
 sub cc_rule {
     my ($to, $from) = @_;
     rule $to, $from, sub {
-        run $ENV{CC}, $from, qw(-c -std=c99 -Wall -ggdb -o), $to;
+        run $ENV{CC}, $from, map("-I$_", @includes), qw(-c -std=c99 -Wall -ggdb -o), $to;
     };
 }
 sub ld_rule {
@@ -24,16 +23,16 @@ sub ld_rule {
 }
 
 for (@objects) {
-    cc_rule "$_.o", "$_.c";
+    cc_rule "tmp/$_.o", "src/$_.c";
 }
-cc_rule 'main_sdl.o', 'main_sdl.c';
-cc_rule 'main_profile.o', 'main_profile.c';
-ld_rule 'midieval', ['main_sdl.o', map "$_.o", @objects];
-ld_rule 'midieval_profile', ['main_profile.o', map "$_.o", @objects];
+cc_rule 'tmp/main_sdl.o', 'src/main_sdl.c';
+cc_rule 'tmp/main_profile.o', 'src/main_profile.c';
+ld_rule 'midieval_sdl', ['tmp/main_sdl.o', map "tmp/$_.o", @objects];
+ld_rule 'midieval_profile', ['tmp/main_profile.o', map "tmp/$_.o", @objects];
 
-rule 'clean', [], sub { unlink 'midieval', 'midieval_profile', glob '*.o'; };
+rule 'clean', [], sub { unlink 'midieval_sdl', 'midieval_profile', glob 'tmp/*'; };
 
-defaults 'midieval', 'midieval_profile';
+defaults 'midieval_sdl', 'midieval_profile';
 
  # Automatically glean subdeps from #includes
 subdep sub {
@@ -46,7 +45,7 @@ subdep sub {
     my @r;
     for (@incs) {
         for my $I (@includes, $base) {
-            push @r, realpath("$I/$_") if -e("$I/$_");
+            push @r, rel2abs("$I/$_") if -e("$I/$_");
         }
     }
     return @r;
