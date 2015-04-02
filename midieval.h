@@ -25,11 +25,11 @@ void mdv_free_player (MDV_Player*);
 
 ///// Main sequences API /////
 
+MDV_Sequence* mdv_load_midi (const char* filename);
+
 void mdv_free_sequence (MDV_Sequence*);
 
 void mdv_print_sequence (MDV_Sequence*);
-
-MDV_Sequence* mdv_load_midi (const char* filename);
 
 
 ///// Events API /////
@@ -138,7 +138,7 @@ void mdv_bank_free_patches (MDV_Bank*);
 ///// Auxilary player API /////
 
  // Reset player to initial state
-void mdV_reset_player (MDV_Player*);
+void mdv_reset_player (MDV_Player*);
  // Load an individual patch from a file
 void mdv_load_patch (MDV_Player*, uint8_t index, const char* filename);
 void mdv_load_drum (MDV_Player*, uint8_t drum, const char* filename);
