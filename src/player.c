@@ -234,7 +234,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
     }
     for (int i = 0; i < len; i++) {
          // Advance event timeline.
-        if (!player->done && !--player->samples_to_tick) {
+        if (!player->done && !player->samples_to_tick) {
             while (!player->done && !player->ticks_to_event) {
                 do_event(player, &player->current->event);
                 uint32_t old_time = player->current->time;
@@ -249,6 +249,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
             --player->ticks_to_event;
             player->samples_to_tick = player->tick_length;
         }
+        --player->samples_to_tick;
          // Now mix voices
         int32_t left = 0;
         int32_t right = 0;
