@@ -4,15 +4,33 @@ use MakePl;
 
 $ENV{CC} //= 'gcc';
 
- # Sample rules
+my %config = (
+    build => undef,
+);
+config('build-config', \%config, sub {
+    if (!defined($config{build})) {
+        print "build-config: setting --build=release\n";
+        $config{build} = 'release';
+    }
+});
+option 'build', sub {
+    $_[0] eq 'release' or $_[0] eq 'debug'
+        or die "Unsupported build type.  Recognized are: release debug\n";
+    $config{build} = $_[0];
+}, '--build=[release|debug] - Select build type (current: ' . ($config{build} // 'release') . ')';
 
 my @objects = qw(events midi_files patch_files player);
 my @includes = qw(inc);
 
+my %opts = (
+    debug => [qw(-Wall -ggdb)],
+    release => [qw(-Wall -O3)]
+);
+
 sub cc_rule {
     my ($to, $from) = @_;
-    rule $to, $from, sub {
-        run $ENV{CC}, $from, map("-I$_", @includes), qw(-c -std=c99 -Wall -ggdb -o), $to;
+    rule $to, [$from, 'build-config'], sub {
+        run $ENV{CC}, $from, map("-I$_", @includes), @{$opts{$config{build}}}, qw(-c -std=c99 -o), $to;
     };
 }
 sub ar_rule {
