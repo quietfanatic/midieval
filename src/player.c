@@ -70,8 +70,7 @@ void mdv_reset_player (MDV_Player* p) {
 }
 
 MDV_Player* mdv_new_player () {
-    init_freqs();
-    init_vols();
+    init_tables();
     MDV_Player* player = (MDV_Player*)malloc(sizeof(MDV_Player));
     mdv_reset_player(player);
     mdv_bank_init(&player->bank);
@@ -319,8 +318,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         v->tremolo_sweep_position = 1 << 16;
                     int32_t tremolo_depth = (sample->tremolo_depth << 7) * v->tremolo_sweep_position;
                     v->tremolo_phase += sample->tremolo_phase_increment;
-                    double tremolo_volume = 1.0 +
-                        sin(2 * 3.14159265358979 / 1024.0 * (v->tremolo_phase >> 5))
+                    double tremolo_volume = 1.0 + sines[(v->tremolo_phase >> 5) % 1024]
                          * tremolo_depth * 38 * (1.0 / (double)(1<<17));
 
                      // Calculate new position
