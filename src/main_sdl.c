@@ -14,11 +14,6 @@ int main (int argc, char** argv) {
     mdv_load_config(player, "/usr/local/share/eawpats/gravis.cfg");
     MDV_Sequence* seq = mdv_load_midi(argc == 2 ? argv[1] : "sample/test.mid");
     mdv_play_sequence(player, seq);
-    MDV_Patch* p = _mdv_load_patch("/usr/local/share/eawpats/vibes.pat");
-    for (uint32_t i = 0; i < 6; i++) {
-        printf("env rate %u: %u\n", i, p->samples[0].envelope_rates[i]);
-        printf("env offset %u: %u\n", i, p->samples[0].envelope_offsets[i]);
-    }
 
      // Set up SDL audio
     SDL_AudioSpec spec;
