@@ -279,7 +279,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     uint32_t freq = get_freq(v->note * 256 + ch->pitch_bend / 16);
                      // Do envelopes  TODO: fade to 0 at end
                     if (no_envelope) {
-                        v->envelope_value = 1024 << 20;
+                        v->envelope_value = 1023 << 20;
                     }
                     else {
                         uint32_t rate = sample->envelope_rates[v->envelope_phase];
@@ -358,9 +358,9 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     int64_t samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                     samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
                      // Volume calculation.  Is there a better way to do this?
-                    if (v->envelope_value > 1024 << 20) {
+                    if (v->envelope_value > 1023 << 20) {
                         printf("Warning: envelope_value too high!\n");
-                        v->envelope_value = 1024 << 20;
+                        v->envelope_value = 1023 << 20;
                     }
                     double envelope_volume = pows[v->envelope_value >> 20];
                     uint32_t volume = (uint32_t)v->patch->volume * 128
