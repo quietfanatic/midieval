@@ -21,6 +21,7 @@ typedef struct Voice {
     int32_t tremolo_phase;
      // 32:32 fixed point
     uint64_t sample_pos;
+    MDV_Patch* patch;  // Giving up and inserting this
 } Voice;
 
 typedef struct Channel {
@@ -31,6 +32,9 @@ typedef struct Channel {
     int8_t pan;
     int16_t pitch_bend;
     uint8_t voices;
+     // Usually true for drum patches
+    uint8_t no_envelope;
+    uint8_t no_loop;
 } Channel;
 
 struct MDV_Player {
@@ -139,15 +143,15 @@ static void do_event (MDV_Player* player, MDV_Event* event) {
                 v->tremolo_sweep_position = 0;
                 v->tremolo_phase = 0;
                  // Decide which patch sample we're using
-                MDV_Patch* patch = event->channel == 9
+                v->patch = event->channel == 9
                     ? player->bank.drums[v->note]
                     : player->bank.patches[ch->program];
-                if (patch) {
-                    if (patch->note >= 0)
-                        v->note = patch->note;
+                if (v->patch) {
+                    if (v->patch->note >= 0)
+                        v->note = v->patch->note;
                     uint32_t freq = get_freq(v->note << 8);
-                    for (uint8_t i = 0; i < patch->n_samples; i++) {
-                        if (patch->samples[i].high_freq > freq) {
+                    for (uint8_t i = 0; i < v->patch->n_samples; i++) {
+                        if (v->patch->samples[i].high_freq > freq) {
                             v->sample_index = i;
                             break;
                         }
@@ -174,14 +178,15 @@ static void do_event (MDV_Player* player, MDV_Event* event) {
         }
         case MDV_PROGRAM_CHANGE: {
              // Silence all voices in this channel.
-            uint8_t* np = &player->channels[event->channel].voices;
+            Channel* ch = &player->channels[event->channel];
+            uint8_t* np = &ch->voices;
             while (*np != 255) {
                 Voice* v = &player->voices[*np];
                 *np = v->next;
                 v->next = player->inactive;
                 player->inactive = v - player->voices;
             }
-            player->channels[event->channel].program = event->param1;
+            ch->program = event->param1;
             break;
         }
         case MDV_PITCH_BEND: {
@@ -203,6 +208,19 @@ typedef struct Samp {
     int16_t l;
     int16_t r;
 } Samp;
+
+void mdv_fast_forward_to_note (MDV_Player* player) {
+    if (!player->seq) return;
+    player->samples_to_tick = 1;
+    player->ticks_to_event = 0;
+    while (!player->done && player->current->event.type != MDV_NOTE_ON) {
+        do_event(player, &player->current->event);
+        player->current += 1;
+        if (player->current >= player->seq->events + player->seq->n_events) {
+            player->done = 1;
+        }
+    }
+}
 
 void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
     MDV_Sequence* seq = player->seq;
@@ -249,41 +267,49 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     continue;
                 }
                 skip_delete_voice: { }
-                MDV_Patch* patch = ch == player->channels+9
-                    ? player->bank.drums[v->note]
-                    : player->bank.patches[ch->program];
-                if (patch) {
-                    MDV_Sample* sample = &patch->samples[v->sample_index];
+                uint8_t no_envelope = 0;
+                uint8_t no_loop = 0;
+                if (ch == player->channels+9) {
+                    no_envelope = !v->patch->keep_envelope;
+                    no_loop = !v->patch->keep_loop;
+                }
+                if (v->patch) {
+                    MDV_Sample* sample = &v->patch->samples[v->sample_index];
                      // Account for pitch bend
                     uint32_t freq = get_freq(v->note * 256 + ch->pitch_bend / 16);
                      // Do envelopes  TODO: fade to 0 at end
-                    uint32_t rate = sample->envelope_rates[v->envelope_phase];
-                    uint32_t target = sample->envelope_offsets[v->envelope_phase];
-                    if (target > v->envelope_value) {
-                        if (v->envelope_value + rate < target) {
-                            v->envelope_value += rate;
-                        }
-                        else if (v->envelope_phase == 5) {
-                            goto delete_voice;
-                        }
-                        else {
-                            v->envelope_value = target;
-                            if (v->envelope_phase != 2) {
-                                v->envelope_phase += 1;
-                            }
-                        }
+                    if (no_envelope) {
+                        v->envelope_value = 1024 << 20;
                     }
                     else {
-                        if (target + rate < v->envelope_value) {
-                            v->envelope_value -= rate;
-                        }
-                        else if (v->envelope_phase == 5 || target == 0) {
-                            goto delete_voice;
+                        uint32_t rate = sample->envelope_rates[v->envelope_phase];
+                        uint32_t target = sample->envelope_offsets[v->envelope_phase];
+                        if (target > v->envelope_value) {
+                            if (v->envelope_value + rate < target) {
+                                v->envelope_value += rate;
+                            }
+                            else if (v->envelope_phase == 5) {
+                                goto delete_voice;
+                            }
+                            else {
+                                v->envelope_value = target;
+                                if (v->envelope_phase != 2) {
+                                    v->envelope_phase += 1;
+                                }
+                            }
                         }
                         else {
-                            v->envelope_value = target;
-                            if (v->envelope_phase != 2) {
-                                v->envelope_phase += 1;
+                            if (target + rate < v->envelope_value) {
+                                v->envelope_value -= rate;
+                            }
+                            else if (v->envelope_phase == 5 || target == 0) {
+                                goto delete_voice;
+                            }
+                            else {
+                                v->envelope_value = target;
+                                if (v->envelope_phase != 2) {
+                                    v->envelope_phase += 1;
+                                }
                             }
                         }
                     }
@@ -306,7 +332,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         next_pos = v->sample_pos + 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
                     }
                      // Loop
-                    if (sample->loop) {
+                    if (sample->loop && !no_loop) {
                         if (v->backwards) {
                             if (next_pos <= sample->loop_start * 0x100000000LL) {
                                 v->backwards = 0;
@@ -337,7 +363,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         printf("Warning: envelope_value too high!\n");
                     }
                     double envelope_volume = pow(2.0, ((v->envelope_value >> 20) / 1023.0 - 1) * 6);
-                    uint32_t volume = (uint32_t)patch->volume * 128
+                    uint32_t volume = (uint32_t)v->patch->volume * 128
                                     * vols[ch->volume] / 65535
                                     * vols[ch->expression] / 65535
                                     * vols[v->velocity] / 65535

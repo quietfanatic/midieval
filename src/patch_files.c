@@ -90,6 +90,8 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
     MDV_Patch* pat = malloc(sizeof(MDV_Patch));
     pat->samples = NULL;
     pat->note = -1;
+    pat->keep_envelope = 0;
+    pat->keep_loop = 0;
     pat->volume = read_u16(f);
     skip(f, 4);  // Data size
     skip(f, 36);  // Reserved
@@ -406,17 +408,27 @@ void mdv_bank_load_config (MDV_Bank* bank, const char* cfg) {
                 skip_ws(&p, end);
                 while (p != end && *p != '\n') {
                     char* option = read_word(&p, end);
+                    uint32_t opt_len = p - option;
                     skip_ws(&p, end);
                     require_char(&p, end, '=');
                     skip_ws(&p, end);
-                    if (cmp_strs(option, p - option, "amp", 3)) {
+                    if (cmp_strs(option, opt_len, "amp", 3)) {
                         int32_t percent = read_i32(&p, end);
                         patch->volume = patch->volume * percent / 100;
                     }
-                    else if (cmp_strs(option, p - option, "note", 4)) {
+                    else if (cmp_strs(option, opt_len, "note", 4)) {
                         int32_t note = read_i32(&p, end);
                         if (note >= 0 && note <= 127) {
                             patch->note = note;
+                        }
+                    }
+                    else if (cmp_strs(option, opt_len, "keep", 4)) {
+                        char* keep = read_word(&p, end);
+                        if (cmp_strs(keep, p - keep, "loop", 4)) {
+                            patch->keep_loop = 1;
+                        }
+                        else if (cmp_strs(keep, p - keep, "env", 3)) {
+                            patch->keep_envelope = 1;
                         }
                     }
                     else {

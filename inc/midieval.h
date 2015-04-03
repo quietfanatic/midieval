@@ -22,6 +22,7 @@ int mdv_currently_playing (MDV_Player*);
  // Delete a player
 void mdv_free_player (MDV_Player*);
 
+void mdv_fast_forward_to_note (MDV_Player*);
 
 ///// Main sequences API /////
 
@@ -124,6 +125,8 @@ typedef struct MDV_Patch {
     uint16_t volume;
     int8_t note;
     uint8_t n_samples;
+    uint8_t keep_loop;
+    uint8_t keep_envelope;
     MDV_Sample* samples;
 } MDV_Patch;
 
