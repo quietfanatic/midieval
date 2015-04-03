@@ -336,12 +336,15 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     int64_t samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                     samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
                      // Volume calculation.  Is there a better way to do this?
-                    uint64_t envelope_volume = v->envelope_value / (0xff << 15);
+                    if (v->envelope_value >> 20 > 1024) {
+                        printf("Warning: envelope_value too high!\n");
+                    }
+                    double envelope_volume = pow(2.0, ((v->envelope_value >> 20) / 1023.0 - 1) * 6);
                     uint32_t volume = (uint32_t)patch->volume * 128
                                     * vols[ch->volume] / 65535
                                     * vols[ch->expression] / 65535
                                     * vols[v->velocity] / 65535
-                                    * vols[envelope_volume] / 65535
+                                    * envelope_volume
                                     * (1.0 + (tremolo_volume / 2000000.0));
                     uint64_t val = samp / 0x100000000LL * volume / 65535;
                     left += val * (64 + ch->pan) / 64;
