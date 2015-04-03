@@ -102,6 +102,15 @@ typedef struct MDV_Sample {
     uint32_t loop_end;
     uint32_t envelope_rates [6];
     uint32_t envelope_offsets [6];
+     // Copied almost verbatim from timidity.
+     // Might originalize later if I can be bothered
+    int32_t tremolo_sweep_increment;
+    int32_t tremolo_phase_increment;
+    int32_t vibrato_sweep_increment;
+    int32_t vibrato_control_ratio;
+    int16_t tremolo_depth;
+    int16_t vibrato_depth;
+
     uint8_t pan;
     uint8_t loop;
     uint8_t pingpong;

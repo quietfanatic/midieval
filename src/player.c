@@ -4,37 +4,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 
- // In MilliHz, between note 0 and note 12
-static uint16_t freqs [256];
-static void init_freqs () {
-    static int initted = 0;
-    if (!initted) {
-        initted = 1;
-        for (uint32_t i = 0; i < 256; i++) {
-            freqs[i] = 440000 * pow(2.0, ((i*12.0/256.0) - 69) / 12.0);
-        }
-    }
-}
- // Using magic value 1.66096404744 stolen from TiMidity source
-static uint16_t vols [128];
-static void init_vols () {
-    static int initted = 0;
-    if (!initted) {
-        initted = 1;
-        for (uint8_t i = 0; i < 128; i++) {
-            vols[i] = 65535 * pow(i / 127.0, 1.66096404744);
-        }
-    }
-}
-
- // Input: 8:8 fixed point
- // Output: frequency in milliHz
-static uint32_t get_freq (uint16_t note) {
-    uint16_t note2 = note / 12;
-    return freqs[note2 % 256] << (note2 / 256);
-}
+#include "player_tables.c"
 
 typedef struct Voice {
     uint8_t next;
@@ -45,6 +16,9 @@ typedef struct Voice {
     uint8_t envelope_phase;
      // 15:15 (?) fixed point
     uint32_t envelope_value;
+     // I don't even know
+    int32_t tremolo_sweep_position;
+    int32_t tremolo_phase;
      // 32:32 fixed point
     uint64_t sample_pos;
 } Voice;
@@ -72,6 +46,8 @@ struct MDV_Player {
     Channel channels [16];
     uint8_t inactive;  // inactive voices
     Voice voices [255];
+     // Debug
+    uint64_t clip_count;
 };
 
 void mdv_reset_player (MDV_Player* p) {
@@ -86,9 +62,13 @@ void mdv_reset_player (MDV_Player* p) {
     for (uint32_t i = 0; i < 255; i++) {
         p->voices[i].next = i + 1;
     }
+    p->clip_count = 0;
 }
 
+FILE* debug_f;
+
 MDV_Player* mdv_new_player () {
+    debug_f = fopen("tremolo_debug", "wb");
     init_freqs();
     init_vols();
     MDV_Player* player = (MDV_Player*)malloc(sizeof(MDV_Player));
@@ -98,6 +78,7 @@ MDV_Player* mdv_new_player () {
 }
 void mdv_free_player (MDV_Player* player) {
     mdv_bank_free_patches(&player->bank);
+    fprintf(stderr, "Clip count: %llu\n", player->clip_count);
     free(player);
 }
 
@@ -158,6 +139,8 @@ static void do_event (MDV_Player* player, MDV_Event* event) {
                 v->sample_index = 0;
                 v->envelope_phase = 0;
                 v->envelope_value = 0;
+                v->tremolo_sweep_position = 0;
+                v->tremolo_phase = 0;
                  // Decide which patch sample we're using
                 MDV_Patch* patch = event->channel == 9
                     ? player->bank.drums[v->note]
@@ -236,7 +219,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
         return;
     }
     for (int i = 0; i < len; i++) {
-         // Advance event timeline
+         // Advance event timeline.
         if (!player->done && !--player->samples_to_tick) {
             while (!player->done && !player->ticks_to_event) {
                 do_event(player, &player->current->event);
@@ -307,6 +290,16 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                             }
                         }
                     }
+                     // Tremolo
+                    v->tremolo_sweep_position += sample->tremolo_sweep_increment;
+                    if (v->tremolo_sweep_position > 1 << 16)
+                        v->tremolo_sweep_position = 1 << 16;
+                    int32_t tremolo_depth = (sample->tremolo_depth << 7) * v->tremolo_sweep_position;
+                    v->tremolo_phase += sample->tremolo_phase_increment;
+                    double tremolo_volume = 1.0 +
+                        sin(2 * 3.14159265358979 / 1024.0 * (v->tremolo_phase >> 5))
+                         * tremolo_depth * 38 * (1.0 / (double)(1<<17));
+
                      // Calculate new position
                     uint64_t next_pos;
                     if (v->backwards) {
@@ -344,18 +337,19 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
                      // Volume calculation.  Is there a better way to do this?
                     uint64_t envelope_volume = v->envelope_value / (0xff << 15);
-                    uint32_t volume = (uint32_t)vols[patch->volume]
+                    uint32_t volume = (uint32_t)patch->volume * 128
                                     * vols[ch->volume] / 65535
                                     * vols[ch->expression] / 65535
                                     * vols[v->velocity] / 65535
-                                    * vols[envelope_volume] / 65535;
+                                    * vols[envelope_volume] / 65535
+                                    * (1.0 + (tremolo_volume / 2000000.0));
                     uint64_t val = samp / 0x100000000LL * volume / 65535;
                     left += val * (64 + ch->pan) / 64;
                     right += val * (64 - ch->pan) / 64;
                      // Move position
                     v->sample_pos = next_pos;
                 }
-                else { // No patch
+                else {  // No patch, do a square wave!
                      // Loop
                     v->sample_pos %= 0x100000000LL;
                      // Add value
@@ -371,6 +365,10 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
         }
         buf[i].l = left > 32767 ? 32767 : left < -32768 ? -32768 : left;
         buf[i].r = right > 32767 ? 32767 : right < -32768 ? -32768 : right;
+        if (buf[i].l == 32767 || buf[i].l == -32768)
+            player->clip_count += 1;
+        if (buf[i].r == 32767 || buf[i].r == -32768)
+            player->clip_count += 1;
     }
 }
 

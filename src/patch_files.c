@@ -140,13 +140,30 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
          //  go ahead and copy that for now.
         for (uint32_t j = 0; j < 6; j++) {
             uint8_t byte = read_u8(f);
-            uint32_t val = (uint32_t)(byte & 0x3f) << (3 * (3 - (byte >> 6)));
+            uint32_t val = (uint32_t)(byte & 0x3f) << (3 * (3 - ((byte >> 6) & 3)));
+             // This 10 is different from timidity's 9.  What gives?
             pat->samples[i].envelope_rates[j] = (val * 44100 / 48000) << 10;
         }
         for (uint32_t j = 0; j < 6; j++) {
             pat->samples[i].envelope_offsets[j] = read_u8(f) << 22;
         }
-        skip(f, 6);  // Tremolo and vibrato stuff
+         // Tremolo and vibrato.
+         // I have absolutely no idea what I'm doing.
+        uint8_t trs = read_u8(f);
+        pat->samples[i].tremolo_sweep_increment = !trs ? 0 :
+            (38 << 16) / (48000 * trs);
+        uint8_t trp = read_u8(f);
+        pat->samples[i].tremolo_phase_increment =
+            (1024*trp << 5) / (38 * 48000);
+        pat->samples[i].tremolo_depth = read_u8(f);
+        uint8_t vbs = read_u8(f);
+        uint8_t vbr = read_u8(f);
+        pat->samples[i].vibrato_sweep_increment = !vbs ? 0 :
+            (vbr*38 << 16) / (48000 * vbs);
+        pat->samples[i].vibrato_control_ratio = !vbr ? 0 :
+            (38 * 48000) / (vbr * 2 * 32);
+        pat->samples[i].vibrato_depth = read_u8(f);
+
         uint8_t sampling_modes = read_u8(f);
         skip(f, 4);  // Scale(?) stuff
         skip(f, 36);  // Reserved
