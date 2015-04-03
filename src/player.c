@@ -65,10 +65,7 @@ void mdv_reset_player (MDV_Player* p) {
     p->clip_count = 0;
 }
 
-FILE* debug_f;
-
 MDV_Player* mdv_new_player () {
-    debug_f = fopen("tremolo_debug", "wb");
     init_freqs();
     init_vols();
     MDV_Player* player = (MDV_Player*)malloc(sizeof(MDV_Player));

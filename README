@@ -10,12 +10,14 @@ TODO:
  ☑ use soundfonts
  ☑ drums
  ☑ sample envelopes
- ☐ figure out more precise envelope semantics
+ ☑ figure out more precise envelope semantics
  ☐ envelope controllers
  ☑ pitch bend
  ☐ pitch bend range
  ☐ verify panning calculations
- ☐ tremolo and vibrato
+ ☑ tremolo
+ ☐ vibrato
+ ☐ what's wrong with some of the drums
  ☑ ping-pong sample looping
  ☐ what's the loop fractions byte?
  ☐ loop markers
