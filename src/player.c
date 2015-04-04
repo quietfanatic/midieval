@@ -223,36 +223,42 @@ void mdv_fast_forward_to_note (MDV_Player* player) {
 
 void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
     MDV_Sequence* seq = player->seq;
-    Samp* buf = (Samp*)buf_;
+    int16_t(* buf )[2] = (int16_t(*)[2])buf_;
     len /= 4;  // Assuming always a whole number of samples
     if (!seq || player->done) {
         for (int i = 0; i < len; i++) {
-            buf[i].l = 0;
-            buf[i].r = 0;
+            buf[i][0] = 0;
+            buf[i][1] = 0;
         }
         return;
     }
-    for (int i = 0; i < len; i++) {
-         // Advance event timeline.
-        if (!player->done && !player->samples_to_tick) {
-            while (!player->done && !player->ticks_to_event) {
-                do_event(player, &player->current->event);
-                uint32_t old_time = player->current->time;
-                player->current += 1;
-                if (player->current >= seq->events + seq->n_events) {
-                    player->done = 1;
-                }
-                else {
-                    player->ticks_to_event = player->current->time - old_time;
-                }
+    int buf_pos = 0;
+    while (buf_pos < len) {
+     // Advance event timeline.
+        while (!player->done && !player->ticks_to_event) {
+            do_event(player, &player->current->event);
+            uint32_t old_time = player->current->time;
+            player->current += 1;
+            if (player->current >= seq->events + seq->n_events) {
+                player->done = 1;
             }
-            --player->ticks_to_event;
-            player->samples_to_tick = player->tick_length;
+            else {
+                player->ticks_to_event = player->current->time - old_time;
+            }
         }
-        --player->samples_to_tick;
-         // Now mix voices
-        int32_t left = 0;
-        int32_t right = 0;
+        if (!player->done)
+            --player->ticks_to_event;
+        player->samples_to_tick = player->tick_length;
+        int chunk_length = player->samples_to_tick < len - buf_pos
+                         ? player->samples_to_tick : len - buf_pos;
+        player->samples_to_tick -= chunk_length;
+
+         // Mix voices a whole chunk at a time.
+        int32_t chunk [chunk_length][2];
+        for (int i = 0; i < chunk_length; i++) {
+            chunk[i][0] = 0;
+            chunk[i][1] = 0;
+        }
         for (Channel* ch = player->channels+0; ch < player->channels+16; ch++) {
             uint8_t* next_ip;
             for (uint8_t* ip = &ch->voices; *ip != 255; ip = next_ip) {
@@ -277,124 +283,136 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     MDV_Sample* sample = &v->patch->samples[v->sample_index];
                      // Account for pitch bend
                     uint32_t freq = get_freq(v->note * 256 + ch->pitch_bend / 16);
-                     // Do envelopes  TODO: fade to 0 at end
-                    if (no_envelope) {
-                        v->envelope_value = 1023 << 20;
-                    }
-                    else {
-                        uint32_t rate = sample->envelope_rates[v->envelope_phase];
-                        uint32_t target = sample->envelope_offsets[v->envelope_phase];
-                        if (target > v->envelope_value) {
-                            if (v->envelope_value + rate < target) {
-                                v->envelope_value += rate;
-                            }
-                            else if (v->envelope_phase == 5) {
-                                goto delete_voice;
-                            }
-                            else {
-                                v->envelope_value = target;
-                                if (v->envelope_phase != 2) {
-                                    v->envelope_phase += 1;
-                                }
-                            }
+                    for (int i = 0; i < chunk_length; i++) {
+                         // Do envelopes  TODO: fade to 0 at end
+                        if (no_envelope) {
+                            v->envelope_value = 1023 << 20;
                         }
                         else {
-                            if (target + rate < v->envelope_value) {
-                                v->envelope_value -= rate;
-                            }
-                            else if (v->envelope_phase == 5 || target == 0) {
-                                goto delete_voice;
-                            }
-                            else {
-                                v->envelope_value = target;
-                                if (v->envelope_phase != 2) {
-                                    v->envelope_phase += 1;
+                            uint32_t rate = sample->envelope_rates[v->envelope_phase];
+                            uint32_t target = sample->envelope_offsets[v->envelope_phase];
+                            if (target > v->envelope_value) {
+                                if (v->envelope_value + rate < target) {
+                                    v->envelope_value += rate;
                                 }
-                            }
-                        }
-                    }
-                     // Tremolo
-                    v->tremolo_sweep_position += sample->tremolo_sweep_increment;
-                    if (v->tremolo_sweep_position > 1 << 16)
-                        v->tremolo_sweep_position = 1 << 16;
-                    int32_t tremolo_depth = (sample->tremolo_depth << 7) * v->tremolo_sweep_position;
-                    v->tremolo_phase += sample->tremolo_phase_increment;
-                    double tremolo_volume = 1.0 + sines[(v->tremolo_phase >> 5) % 1024]
-                         * tremolo_depth * 38 * (1.0 / (double)(1<<17));
-
-                     // Calculate new position
-                    uint64_t next_pos;
-                    if (v->backwards) {
-                        next_pos = v->sample_pos - 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
-                    }
-                    else {
-                        next_pos = v->sample_pos + 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
-                    }
-                     // Loop
-                    if (sample->loop && !no_loop) {
-                        if (v->backwards) {
-                            if (next_pos <= sample->loop_start * 0x100000000LL) {
-                                v->backwards = 0;
-                                next_pos = 2 * sample->loop_start * 0x100000000LL - next_pos;
-                            }
-                        }
-                        else {
-                            if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
-                                if (sample->pingpong) {
-                                    v->backwards = 1;
-                                    next_pos = 2 * sample->loop_end * 0x100000000LL - next_pos;
+                                else if (v->envelope_phase == 5) {
+                                    goto delete_voice;
                                 }
                                 else {
-                                    next_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
+                                    v->envelope_value = target;
+                                    if (v->envelope_phase != 2) {
+                                        v->envelope_phase += 1;
+                                    }
+                                }
+                            }
+                            else {
+                                if (target + rate < v->envelope_value) {
+                                    v->envelope_value -= rate;
+                                }
+                                else if (v->envelope_phase == 5 || target == 0) {
+                                    goto delete_voice;
+                                }
+                                else {
+                                    v->envelope_value = target;
+                                    if (v->envelope_phase != 2) {
+                                        v->envelope_phase += 1;
+                                    }
                                 }
                             }
                         }
+                         // Tremolo
+                        v->tremolo_sweep_position += sample->tremolo_sweep_increment;
+                        if (v->tremolo_sweep_position > 1 << 16)
+                            v->tremolo_sweep_position = 1 << 16;
+                        int32_t tremolo_depth = (sample->tremolo_depth << 7) * v->tremolo_sweep_position;
+                        v->tremolo_phase += sample->tremolo_phase_increment;
+                        double tremolo_volume = 1.0 + sines[(v->tremolo_phase >> 5) % 1024]
+                             * tremolo_depth * 38 * (1.0 / (double)(1<<17));
+
+                         // Calculate new position
+                        uint64_t next_pos;
+                        if (v->backwards) {
+                            next_pos = v->sample_pos - 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                        }
+                        else {
+                            next_pos = v->sample_pos + 0x100000000LL * sample->sample_rate / SAMPLE_RATE * freq / sample->root_freq;
+                        }
+                         // Loop
+                        if (sample->loop && !no_loop) {
+                            if (v->backwards) {
+                                if (next_pos <= sample->loop_start * 0x100000000LL) {
+                                    v->backwards = 0;
+                                    next_pos = 2 * sample->loop_start * 0x100000000LL - next_pos;
+                                }
+                            }
+                            else {
+                                if (v->sample_pos >= sample->loop_end * 0x100000000LL) {
+                                    if (sample->pingpong) {
+                                        v->backwards = 1;
+                                        next_pos = 2 * sample->loop_end * 0x100000000LL - next_pos;
+                                    }
+                                    else {
+                                        next_pos -= (sample->loop_end - sample->loop_start) * 0x100000000LL;
+                                    }
+                                }
+                            }
+                        }
+                         // With interpolation, the length of a sample is one minus the number of points
+                        else if (v->sample_pos >= sample->data_size * 0x100000000LL - 1) {
+                            goto delete_voice;
+                        }
+                         // Linear interpolation.
+                        int64_t samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
+                        samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
+                         // Volume calculation.  Is there a better way to do this?
+                        if (v->envelope_value > 1023 << 20) {
+                            printf("Warning: envelope_value too high!\n");
+                            v->envelope_value = 1023 << 20;
+                        }
+                        double envelope_volume = pows[v->envelope_value >> 20];
+                        uint32_t volume = (uint32_t)v->patch->volume * 128
+                                        * vols[ch->volume] / 65535
+                                        * vols[ch->expression] / 65535
+                                        * vols[v->velocity] / 65535
+                                        * envelope_volume
+                                        * (1.0 + (tremolo_volume / 2000000.0));
+                        uint64_t val = samp / 0x100000000LL * volume / 65535;
+                        chunk[i][0] += val * (64 + ch->pan) / 64;
+                        chunk[i][1] += val * (64 - ch->pan) / 64;
+                         // Move position
+                        v->sample_pos = next_pos;
                     }
-                     // With interpolation, the length of a sample is one minus the number of points
-                    else if (v->sample_pos >= sample->data_size * 0x100000000LL - 1) {
-                        goto delete_voice;
-                    }
-                     // Linear interpolation.
-                    int64_t samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
-                    samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
-                     // Volume calculation.  Is there a better way to do this?
-                    if (v->envelope_value > 1023 << 20) {
-                        printf("Warning: envelope_value too high!\n");
-                        v->envelope_value = 1023 << 20;
-                    }
-                    double envelope_volume = pows[v->envelope_value >> 20];
-                    uint32_t volume = (uint32_t)v->patch->volume * 128
-                                    * vols[ch->volume] / 65535
-                                    * vols[ch->expression] / 65535
-                                    * vols[v->velocity] / 65535
-                                    * envelope_volume
-                                    * (1.0 + (tremolo_volume / 2000000.0));
-                    uint64_t val = samp / 0x100000000LL * volume / 65535;
-                    left += val * (64 + ch->pan) / 64;
-                    right += val * (64 - ch->pan) / 64;
-                     // Move position
-                    v->sample_pos = next_pos;
                 }
                 else {  // No patch, do a square wave!
-                     // Loop
-                    v->sample_pos %= 0x100000000LL;
-                     // Add value
-                    int32_t sign = v->sample_pos < 0x80000000LL ? -1 : 1;
-                    uint32_t val = sign * v->velocity * ch->volume * ch->expression / (32*127);
-                    left += val;
-                    right += val;
-                     // Move position
-                    uint32_t freq = get_freq(v->note << 8);
-                    v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
+                    for (int i = 0; i < chunk_length; i++) {
+                         // Loop
+                        v->sample_pos %= 0x100000000LL;
+                         // Add value
+                        int32_t sign = v->sample_pos < 0x80000000LL ? -1 : 1;
+                        uint32_t val = sign * v->velocity * ch->volume * ch->expression / (32*127);
+                        chunk[i][0] += val;
+                        chunk[i][1] += val;
+                         // Move position
+                        uint32_t freq = get_freq(v->note << 8);
+                        v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
+                    }
                 }
             }
         }
-        buf[i].l = left > 32767 ? 32767 : left < -32768 ? -32768 : left;
-        buf[i].r = right > 32767 ? 32767 : right < -32768 ? -32768 : right;
-        if (buf[i].l == 32767 || buf[i].l == -32768)
-            player->clip_count += 1;
-        if (buf[i].r == 32767 || buf[i].r == -32768)
-            player->clip_count += 1;
+         // Finally write the chunk to buffer
+        for (int i = 0; i < chunk_length; i++) {
+            buf[buf_pos][0] = chunk[i][0] > 32767 ? 32767 : chunk[i][0] < -32768 ? -32768 : chunk[i][0];
+            buf[buf_pos][1] = chunk[i][1] > 32767 ? 32767 : chunk[i][1] < -32768 ? -32768 : chunk[i][1];
+             // debug clip count
+            if (buf[buf_pos][0] == 32767 || buf[buf_pos][0] == -32768)
+                player->clip_count += 1;
+            if (buf[buf_pos][1] == 32767 || buf[buf_pos][1] == -32768)
+                player->clip_count += 1;
+            buf_pos += 1;
+            if (buf_pos > len) {
+                printf("Error: buf_pos too large\n");
+            }
+        }
     }
 }
 
