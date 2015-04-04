@@ -221,6 +221,8 @@ void mdv_fast_forward_to_note (MDV_Player* player) {
     }
 }
 
+#define MAX_CHUNK_LENGTH 512
+
 void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
     MDV_Sequence* seq = player->seq;
     int16_t(* buf )[2] = (int16_t(*)[2])buf_;
@@ -248,12 +250,13 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
         }
         if (!player->done)
             --player->ticks_to_event;
-        player->samples_to_tick = player->tick_length;
-        int chunk_length = player->samples_to_tick < len - buf_pos
-                         ? player->samples_to_tick : len - buf_pos;
+        int chunk_length = player->tick_length < len - buf_pos
+                         ? player->tick_length : len - buf_pos;
+        if (chunk_length > MAX_CHUNK_LENGTH)
+            chunk_length = MAX_CHUNK_LENGTH;
         player->samples_to_tick -= chunk_length;
 
-         // Mix voices a whole chunk at a time.
+         // Mix voices a whole chunk at a time.  This is better for the CPU cache.
         int32_t chunk [chunk_length][2];
         for (int i = 0; i < chunk_length; i++) {
             chunk[i][0] = 0;
@@ -409,9 +412,6 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
             if (buf[buf_pos][1] == 32767 || buf[buf_pos][1] == -32768)
                 player->clip_count += 1;
             buf_pos += 1;
-            if (buf_pos > len) {
-                printf("Error: buf_pos too large\n");
-            }
         }
     }
 }
