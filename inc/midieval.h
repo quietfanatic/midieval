@@ -3,9 +3,11 @@
 
 #include <inttypes.h>
 
+ // I can't guarantee values larger than this won't cause overflow somewhere
+#define MDV_SAMPLE_RATE 48000
+
 typedef struct MDV_Sequence MDV_Sequence;
 typedef struct MDV_Player MDV_Player;
-
 
 ///// Main player API /////
 

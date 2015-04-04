@@ -143,7 +143,7 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
         for (uint32_t j = 0; j < 6; j++) {
             uint8_t byte = read_u8(f);
             uint32_t val = (uint32_t)(byte & 0x3f) << (3 * (3 - ((byte >> 6) & 3)));
-            pat->samples[i].envelope_rates[j] = (val * 44100 / 48000) << 9;
+            pat->samples[i].envelope_rates[j] = (val * 44100 / MDV_SAMPLE_RATE) << 9;
         }
         for (uint32_t j = 0; j < 6; j++) {
             pat->samples[i].envelope_offsets[j] = read_u8(f) << 22;
@@ -153,17 +153,17 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
          // Increasing them makes tremolo and vibrato go slower
         uint32_t trs = read_u8(f);
         pat->samples[i].tremolo_sweep_increment = !trs ? 0 :
-            (38 * 0x1000000) / (48000 * trs);
+            (38 * 0x1000000) / (MDV_SAMPLE_RATE * trs);
         uint32_t trp = read_u8(f);
         pat->samples[i].tremolo_phase_increment =
-            (trp * 0x1000000) / (38 * 48000);
+            (trp * 0x1000000) / (38 * MDV_SAMPLE_RATE);
         pat->samples[i].tremolo_depth = read_u8(f);
         uint32_t vbs = read_u8(f);
         pat->samples[i].vibrato_sweep_increment = !vbs ? 0 :
-            (38 * 0x1000000) / (48000 * vbs);
+            (38 * 0x1000000) / (MDV_SAMPLE_RATE * vbs);
         uint32_t vbr = read_u8(f);
         pat->samples[i].vibrato_phase_increment =
-            (vbr * 0x1000000) / (38 * 48000);
+            (vbr * 0x1000000) / (38 * MDV_SAMPLE_RATE);
         pat->samples[i].vibrato_depth = read_u8(f);
 
         uint8_t sampling_modes = read_u8(f);

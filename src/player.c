@@ -1,7 +1,5 @@
 #include "midieval.h"
 
-#define SAMPLE_RATE 48000
-
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -90,7 +88,7 @@ void mdv_free_player (MDV_Player* player) {
 
 void mdv_play_sequence (MDV_Player* player, MDV_Sequence* seq) {
      // Default tempo is 120bpm
-    player->tick_length = SAMPLE_RATE / seq->tpb / 2;
+    player->tick_length = MDV_SAMPLE_RATE / seq->tpb / 2;
     player->seq = seq;
     player->current = seq->events;
     player->samples_to_tick = player->tick_length;
@@ -203,7 +201,7 @@ static void do_event (MDV_Player* player, MDV_Event* event) {
         }
         case MDV_SET_TEMPO: {
             uint32_t ms_per_beat = event->channel << 16 | event->param1 << 8 | event->param2;
-            player->tick_length = (uint64_t)SAMPLE_RATE * ms_per_beat / 1000000 / player->seq->tpb;
+            player->tick_length = (uint64_t)MDV_SAMPLE_RATE * ms_per_beat / 1000000 / player->seq->tpb;
             break;
         }
         default:
@@ -339,14 +337,14 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                             v->tremolo_phase -= 0x1000000;
                         int32_t tremolo = sample->tremolo_depth
                                         * v->tremolo_sweep_position / (0x1000000 / 0x80)
-                                        * sines[v->tremolo_phase / (0x1000000 / 1024)] / 0x8000;
+                                        * sines[v->tremolo_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
 
                          // Volume calculation.
                         uint32_t volume = (uint32_t)v->patch->volume * 128
                                         * vols[ch->volume] / 0x10000
                                         * vols[ch->expression] / 0x10000
                                         * vols[v->velocity] / 0x10000
-                                        * pows[v->envelope_value / 0x100000] / 0x10000
+                                        * envs[v->envelope_value / 0x100000] / 0x10000
                                         * (0x10000 + tremolo) / 0x10000;
                          // Linear interpolation.
                         uint32_t high = v->sample_pos / 0x100000000LL;
@@ -367,15 +365,15 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                             v->vibrato_phase -= 0x1000000;
                         int32_t vibrato = sample->vibrato_depth
                                         * v->vibrato_sweep_position / (0x1000000 / 0x80)
-                                        * sines[v->vibrato_phase / (0x1000000 / 1024)] / 0x8000;
+                                        * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
 
                          // Notes are on a logarithmic scale, so we add instead of multiplying
                         uint32_t note = v->note * 0x10000
                                       + ch->pitch_bend * 0x10
-                                      + vibrato * 4;  // GOAL: range over a whole step
+                                      + vibrato * 4;  // Range over a whole step
                          // Move sample position forward (or backward)
                         uint64_t inc = 0x100000000LL
-                                     * sample->sample_rate / SAMPLE_RATE
+                                     * sample->sample_rate / MDV_SAMPLE_RATE
                                      * get_freq(note) / sample->root_freq;
                         if (v->backwards) {
                             v->sample_pos -= inc;
@@ -416,7 +414,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         chunk[i][1] += val;
                          // Move position
                         uint32_t freq = get_freq(v->note << 8);
-                        v->sample_pos += 0x100000000LL * freq / 1000 / SAMPLE_RATE;
+                        v->sample_pos += 0x100000000LL * freq / 1000 / MDV_SAMPLE_RATE;
                     }
                 }
             }
