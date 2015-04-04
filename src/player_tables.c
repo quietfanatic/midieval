@@ -23,10 +23,10 @@ static uint32_t get_freq (uint16_t note) {
     return freqs[note2 % 256] << (note2 / 256);
 }
 
-static float sines [1024];
+static int16_t sines [1024];
 static void init_sines () {
-    for (uint16_t i = 0; i < 1024; i++) {
-        sines[i] = sin(2 * 3.14159265358979 * i / 1024);
+    for (int16_t i = 0; i < 1024; i++) {
+        sines[i] = sin(2 * 3.14159265358979 * i / 1024) * 0x7fff;
     }
 }
 
