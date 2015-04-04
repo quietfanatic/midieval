@@ -374,12 +374,12 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         }
                         uint16_t envelope_volume = pows[v->envelope_value >> 20];
                         uint32_t volume = (uint32_t)v->patch->volume * 128
-                                        * vols[ch->volume] / 65535
-                                        * vols[ch->expression] / 65535
-                                        * vols[v->velocity] / 65535
-                                        * envelope_volume / 65535
+                                        * vols[ch->volume] / 65536
+                                        * vols[ch->expression] / 65536
+                                        * vols[v->velocity] / 65536
+                                        * envelope_volume / 65536
                                         * (1.0 + (tremolo_volume / 2000000.0));
-                        uint64_t val = samp / 0x100000000LL * volume / 65535;
+                        uint64_t val = samp / 0x100000000LL * volume / 65536;
                         chunk[i][0] += val * (64 + ch->pan) / 64;
                         chunk[i][1] += val * (64 - ch->pan) / 64;
                          // Move position
