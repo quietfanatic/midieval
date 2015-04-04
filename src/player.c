@@ -152,7 +152,7 @@ static void do_event (MDV_Player* player, MDV_Event* event) {
                 if (v->patch) {
                     if (v->patch->note >= 0)
                         v->note = v->patch->note;
-                    uint32_t freq = get_freq(v->note << 8);
+                    uint32_t freq = get_freq(v->note * 0x10000);
                     for (uint8_t i = 0; i < v->patch->n_samples; i++) {
                         if (v->patch->samples[i].high_freq > freq) {
                             v->sample_index = i;
@@ -355,7 +355,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         chunk[i][1] += val * (64 - ch->pan) / 64;
 
                          // Move sample position forward (or backward)
-                        uint32_t freq = get_freq(v->note * 256 + ch->pitch_bend / 16);
+                        uint32_t freq = get_freq(v->note * 0x10000 + ch->pitch_bend * 0x10);
                         uint64_t inc = 0x100000000LL * sample->sample_rate / SAMPLE_RATE
                                                      * freq / sample->root_freq;
                         if (v->backwards) {
