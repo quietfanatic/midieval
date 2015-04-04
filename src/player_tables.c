@@ -30,10 +30,10 @@ static void init_sines () {
     }
 }
 
-static float pows [1024];
+static uint16_t pows [1024];
 static void init_pows () {
     for (uint16_t i = 0; i < 1024; i++) {
-        pows[i] = pow(2.0, (i / 1023.0 - 1) * 6);
+        pows[i] = pow(2.0, (i / 1023.0 - 1) * 6) * 65535;
     }
 }
 

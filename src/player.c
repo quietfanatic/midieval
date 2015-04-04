@@ -372,12 +372,12 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                             printf("Warning: envelope_value too high!\n");
                             v->envelope_value = 1023 << 20;
                         }
-                        double envelope_volume = pows[v->envelope_value >> 20];
+                        uint16_t envelope_volume = pows[v->envelope_value >> 20];
                         uint32_t volume = (uint32_t)v->patch->volume * 128
                                         * vols[ch->volume] / 65535
                                         * vols[ch->expression] / 65535
                                         * vols[v->velocity] / 65535
-                                        * envelope_volume
+                                        * envelope_volume / 65535
                                         * (1.0 + (tremolo_volume / 2000000.0));
                         uint64_t val = samp / 0x100000000LL * volume / 65535;
                         chunk[i][0] += val * (64 + ch->pan) / 64;
