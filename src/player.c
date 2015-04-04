@@ -289,7 +289,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     for (int i = 0; i < chunk_length; i++) {
                          // Do envelopes  TODO: fade to 0 at end
                         if (no_envelope) {
-                            v->envelope_value = 1023 << 20;
+                            v->envelope_value = 0x3ff00000;
                         }
                         else {
                             uint32_t rate = sample->envelope_rates[v->envelope_phase];
@@ -322,11 +322,15 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                     }
                                 }
                             }
+                            if (v->envelope_value > 0x3ff00000) {
+                                printf("DEBUG Warning: envelope_value too high!\n");
+                                v->envelope_value = 0x3ff00000;
+                            }
                         }
                          // Tremolo
                         v->tremolo_sweep_position += sample->tremolo_sweep_increment;
-                        if (v->tremolo_sweep_position > 1 << 16)
-                            v->tremolo_sweep_position = 1 << 16;
+                        if (v->tremolo_sweep_position > 0x10000)
+                            v->tremolo_sweep_position = 0x10000;
                         int32_t tremolo_depth = (sample->tremolo_depth << 7) * v->tremolo_sweep_position;
                         v->tremolo_phase += sample->tremolo_phase_increment;
                         double tremolo_volume = 1.0 + sines[(v->tremolo_phase >> 5) % 1024]
@@ -367,19 +371,14 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                          // Linear interpolation.
                         int64_t samp = sample->data[v->sample_pos / 0x100000000LL] * (0x100000000LL - (v->sample_pos & 0xffffffffLL));
                         samp += sample->data[v->sample_pos / 0x100000000LL + 1] * (v->sample_pos & 0xffffffffLL);
-                         // Volume calculation.  Is there a better way to do this?
-                        if (v->envelope_value > 1023 << 20) {
-                            printf("Warning: envelope_value too high!\n");
-                            v->envelope_value = 1023 << 20;
-                        }
-                        uint16_t envelope_volume = pows[v->envelope_value >> 20];
+                         // Volume calculation.
                         uint32_t volume = (uint32_t)v->patch->volume * 128
-                                        * vols[ch->volume] / 65536
-                                        * vols[ch->expression] / 65536
-                                        * vols[v->velocity] / 65536
-                                        * envelope_volume / 65536
+                                        * vols[ch->volume] / 0x10000
+                                        * vols[ch->expression] / 0x10000
+                                        * vols[v->velocity] / 0x10000
+                                        * pows[v->envelope_value / 0x100000] / 0x10000
                                         * (1.0 + (tremolo_volume / 2000000.0));
-                        uint64_t val = samp / 0x100000000LL * volume / 65536;
+                        uint64_t val = samp / 0x100000000LL * volume / 0x10000;
                         chunk[i][0] += val * (64 + ch->pan) / 64;
                         chunk[i][1] += val * (64 - ch->pan) / 64;
                          // Move position
