@@ -330,11 +330,12 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         v->tremolo_sweep_position += sample->tremolo_sweep_increment;
                         if (v->tremolo_sweep_position > 0x10000)
                             v->tremolo_sweep_position = 0x10000;
-                        int32_t tremolo_depth = (sample->tremolo_depth << 7)
-                                              * v->tremolo_sweep_position / 0x10000;
                         v->tremolo_phase += sample->tremolo_phase_increment;
-                        uint32_t tremolo_volume = 0x10000 + tremolo_depth
-                            * sines[(v->tremolo_phase >> 5) % 1024] / 0x8000;
+                        if (v->tremolo_phase >= 0x10000)
+                            v->tremolo_phase -= 0x10000;
+                        int32_t tremolo = sample->tremolo_depth * 0x80
+                                        * v->tremolo_sweep_position / 0x10000
+                                        * sines[v->tremolo_phase * 1024 / 0x10000] / 0x8000;
 
                          // Volume calculation.
                         uint32_t volume = (uint32_t)v->patch->volume * 128
@@ -342,7 +343,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                         * vols[ch->expression] / 0x10000
                                         * vols[v->velocity] / 0x10000
                                         * pows[v->envelope_value / 0x100000] / 0x10000
-                                        * tremolo_volume / 0x10000;
+                                        * (0x10000 + tremolo) / 0x10000;
                          // Linear interpolation.
                         uint32_t high = v->sample_pos / 0x100000000LL;
                         uint64_t low = v->sample_pos % 0x100000000LL;

@@ -152,10 +152,10 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
          // I have absolutely no idea what I'm doing.
         uint8_t trs = read_u8(f);
         pat->samples[i].tremolo_sweep_increment = !trs ? 0 :
-            (38 << 16) / (48000 * trs);
+            (38 * 0x10000) / (48000 * trs);
         uint8_t trp = read_u8(f);
         pat->samples[i].tremolo_phase_increment =
-            (1024*trp << 5) / (38 * 48000);
+            (trp * 0x10000) / (38 * 48000);
         pat->samples[i].tremolo_depth = read_u8(f);
         uint8_t vbs = read_u8(f);
         uint8_t vbr = read_u8(f);
