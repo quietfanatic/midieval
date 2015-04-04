@@ -16,9 +16,11 @@ typedef struct Voice {
     uint8_t envelope_phase;
      // 15:15 (?) fixed point
     uint32_t envelope_value;
-     // I don't even know
+     // 8:24
     int32_t tremolo_sweep_position;
     int32_t tremolo_phase;
+    int32_t vibrato_sweep_position;
+    int32_t vibrato_phase;
      // 32:32 fixed point
      // Signed to make math easier
     int64_t sample_pos;
@@ -145,6 +147,8 @@ static void do_event (MDV_Player* player, MDV_Event* event) {
                 v->envelope_value = 0;
                 v->tremolo_sweep_position = 0;
                 v->tremolo_phase = 0;
+                v->vibrato_sweep_position = 0;
+                v->vibrato_phase = 0;
                  // Decide which patch sample we're using
                 v->patch = event->channel == 9
                     ? player->bank.drums[v->note]
@@ -328,14 +332,14 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         }
                          // Tremolo
                         v->tremolo_sweep_position += sample->tremolo_sweep_increment;
-                        if (v->tremolo_sweep_position > 0x10000)
-                            v->tremolo_sweep_position = 0x10000;
+                        if (v->tremolo_sweep_position > 0x1000000)
+                            v->tremolo_sweep_position = 0x1000000;
                         v->tremolo_phase += sample->tremolo_phase_increment;
-                        if (v->tremolo_phase >= 0x10000)
-                            v->tremolo_phase -= 0x10000;
-                        int32_t tremolo = sample->tremolo_depth * 0x80
-                                        * v->tremolo_sweep_position / 0x10000
-                                        * sines[v->tremolo_phase * 1024 / 0x10000] / 0x8000;
+                        if (v->tremolo_phase >= 0x1000000)
+                            v->tremolo_phase -= 0x1000000;
+                        int32_t tremolo = sample->tremolo_depth
+                                        * v->tremolo_sweep_position / (0x1000000 / 0x80)
+                                        * sines[v->tremolo_phase / (0x1000000 / 1024)] / 0x8000;
 
                          // Volume calculation.
                         uint32_t volume = (uint32_t)v->patch->volume * 128
@@ -354,11 +358,25 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         chunk[i][0] += val * (64 + ch->pan) / 64;
                         chunk[i][1] += val * (64 - ch->pan) / 64;
 
+                         // Vibrato
+                        v->vibrato_sweep_position += sample->vibrato_sweep_increment;
+                        if (v->vibrato_sweep_position > 0x1000000)
+                            v->vibrato_sweep_position = 0x1000000;
+                        v->vibrato_phase += sample->vibrato_phase_increment;
+                        if (v->vibrato_phase >= 0x1000000)
+                            v->vibrato_phase -= 0x1000000;
+                        int32_t vibrato = sample->vibrato_depth
+                                        * v->vibrato_sweep_position / (0x1000000 / 0x80)
+                                        * sines[v->vibrato_phase / (0x1000000 / 1024)] / 0x8000;
+
+                         // Notes are on a logarithmic scale, so we add instead of multiplying
+                        uint32_t note = v->note * 0x10000
+                                      + ch->pitch_bend * 0x10
+                                      + vibrato * 4;  // GOAL: range over a whole step
                          // Move sample position forward (or backward)
-                        uint32_t freq = get_freq(v->note * 0x10000 + ch->pitch_bend * 0x10);
                         uint64_t inc = 0x100000000LL
                                      * sample->sample_rate / SAMPLE_RATE
-                                     * freq / 0x10000 * 1000 / sample->root_freq;
+                                     * get_freq(note) / sample->root_freq;
                         if (v->backwards) {
                             v->sample_pos -= inc;
                             if (v->sample_pos <= sample->loop_start * 0x100000000LL) {

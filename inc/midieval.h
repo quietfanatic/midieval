@@ -94,7 +94,7 @@ typedef struct MDV_Sequence {
 ///// Patches API /////
 
 typedef struct MDV_Sample {
-     // in milliHz
+     // in 16:16 Hz
     uint32_t low_freq;
     uint32_t high_freq;
     uint32_t root_freq;
@@ -103,12 +103,11 @@ typedef struct MDV_Sample {
     uint32_t loop_end;
     uint32_t envelope_rates [6];
     uint32_t envelope_offsets [6];
-     // Copied almost verbatim from timidity.
-     // Might originalize later if I can be bothered
+     // 8:24 fixed point, I think
     int32_t tremolo_sweep_increment;
     int32_t tremolo_phase_increment;
     int32_t vibrato_sweep_increment;
-    int32_t vibrato_control_ratio;
+    int32_t vibrato_phase_increment;
     int16_t tremolo_depth;
     int16_t vibrato_depth;
 

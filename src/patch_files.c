@@ -132,9 +132,9 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
         pat->samples[i].loop_end = read_u32(f);
         pat->samples[i].loop_end /= 2;
         pat->samples[i].sample_rate = read_u16(f);
-        pat->samples[i].low_freq = read_u32(f);
-        pat->samples[i].high_freq = read_u32(f);
-        pat->samples[i].root_freq = read_u32(f);
+        pat->samples[i].low_freq = read_u32(f) * 0x10000LL / 1000;
+        pat->samples[i].high_freq = read_u32(f) * 0x10000LL / 1000;
+        pat->samples[i].root_freq = read_u32(f) * 0x10000LL / 1000;
         skip(f, 2);  // Tune
         pat->samples[i].pan = read_u8(f);
          // These formulas are pretty much stolen from TiMidity,
@@ -149,20 +149,21 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
             pat->samples[i].envelope_offsets[j] = read_u8(f) << 22;
         }
          // Tremolo and vibrato.
-         // I have absolutely no idea what I'm doing.
-        uint8_t trs = read_u8(f);
+         // These 38s are an arbitrary scaling factor copied from Timidity
+         // Increasing them makes tremolo and vibrato go slower
+        uint32_t trs = read_u8(f);
         pat->samples[i].tremolo_sweep_increment = !trs ? 0 :
-            (38 * 0x10000) / (48000 * trs);
-        uint8_t trp = read_u8(f);
+            (38 * 0x1000000) / (48000 * trs);
+        uint32_t trp = read_u8(f);
         pat->samples[i].tremolo_phase_increment =
-            (trp * 0x10000) / (38 * 48000);
+            (trp * 0x1000000) / (38 * 48000);
         pat->samples[i].tremolo_depth = read_u8(f);
-        uint8_t vbs = read_u8(f);
-        uint8_t vbr = read_u8(f);
-        uint32_t vbcr = !vbr ? 0 : (38 * 48000) / (vbr * 2 * 32);
+        uint32_t vbs = read_u8(f);
         pat->samples[i].vibrato_sweep_increment = !vbs ? 0 :
-            (vbcr*38 << 16) / (48000 * vbs);
-        pat->samples[i].vibrato_control_ratio = vbcr;
+            (38 * 0x1000000) / (48000 * vbs);
+        uint32_t vbr = read_u8(f);
+        pat->samples[i].vibrato_phase_increment =
+            (vbr * 0x1000000) / (38 * 48000);
         pat->samples[i].vibrato_depth = read_u8(f);
 
         uint8_t sampling_modes = read_u8(f);
