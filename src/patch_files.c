@@ -159,10 +159,10 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
         pat->samples[i].tremolo_depth = read_u8(f);
         uint8_t vbs = read_u8(f);
         uint8_t vbr = read_u8(f);
+        uint32_t vbcr = !vbr ? 0 : (38 * 48000) / (vbr * 2 * 32);
         pat->samples[i].vibrato_sweep_increment = !vbs ? 0 :
-            (vbr*38 << 16) / (48000 * vbs);
-        pat->samples[i].vibrato_control_ratio = !vbr ? 0 :
-            (38 * 48000) / (vbr * 2 * 32);
+            (vbcr*38 << 16) / (48000 * vbs);
+        pat->samples[i].vibrato_control_ratio = vbcr;
         pat->samples[i].vibrato_depth = read_u8(f);
 
         uint8_t sampling_modes = read_u8(f);

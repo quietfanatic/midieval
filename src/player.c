@@ -297,7 +297,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         else {
                             uint32_t rate = sample->envelope_rates[v->envelope_phase];
                             uint32_t target = sample->envelope_offsets[v->envelope_phase];
-                            if (target > v->envelope_value) {
+                            if (target > v->envelope_value) {  // Get louder
                                 if (v->envelope_value + rate < target) {
                                     v->envelope_value += rate;
                                 }
@@ -311,7 +311,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                     }
                                 }
                             }
-                            else {
+                            else {  // Get quieter
                                 if (target + rate < v->envelope_value) {
                                     v->envelope_value -= rate;
                                 }
@@ -356,8 +356,9 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
 
                          // Move sample position forward (or backward)
                         uint32_t freq = get_freq(v->note * 0x10000 + ch->pitch_bend * 0x10);
-                        uint64_t inc = 0x100000000LL * sample->sample_rate / SAMPLE_RATE
-                                                     * freq / sample->root_freq;
+                        uint64_t inc = 0x100000000LL
+                                     * sample->sample_rate / SAMPLE_RATE
+                                     * freq / 0x10000 * 1000 / sample->root_freq;
                         if (v->backwards) {
                             v->sample_pos -= inc;
                             if (v->sample_pos <= sample->loop_start * 0x100000000LL) {

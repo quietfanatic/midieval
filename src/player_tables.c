@@ -1,19 +1,20 @@
 
 #include <math.h>
 
- // In MilliHz, between note 0 and note 12
-static uint16_t freqs [1024];
+ // In 16:16 Hz, between note 0 and note 12
+#define FREQ_TABLE_SIZE 4096
+static uint32_t freqs [FREQ_TABLE_SIZE];
 static void init_freqs () {
-    for (uint32_t i = 0; i < 1024; i++) {
-        freqs[i] = 440000 * pow(2.0, ((i*12.0/1024.0) - 69) / 12.0);
+    for (uint32_t i = 0; i < FREQ_TABLE_SIZE; i++) {
+        freqs[i] = 440 * 0x10000 * pow(2.0, ((i*12.0/FREQ_TABLE_SIZE) - 69) / 12.0);
     }
 }
  // Input: 16:16 fixed point
- // Output: frequency in milliHz
+ // Output: frequency in 16:16 Hz
 static uint32_t get_freq (uint32_t note) {
     uint32_t octave = note / 12 / 0x10000;
     uint32_t fraction = note / 12 % 0x10000;
-    return freqs[fraction * 1024 / 0x10000] << octave;
+    return freqs[fraction * FREQ_TABLE_SIZE / 0x10000] << octave;
 }
 
  // Using magic value 1.66096404744 stolen from TiMidity source
