@@ -372,9 +372,8 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                       + ch->pitch_bend * 0x10
                                       + vibrato * 4;  // Range over a whole step
                          // Move sample position forward (or backward)
-                        uint64_t inc = 0x100000000LL
-                                     * sample->sample_rate / MDV_SAMPLE_RATE
-                                     * get_freq(note) / sample->root_freq;
+                        int64_t inc = sample->sample_inc
+                                    * get_freq(note) / sample->root_freq;
                         if (v->backwards) {
                             v->sample_pos -= inc;
                             if (v->sample_pos <= sample->loop_start * 0x100000000LL) {

@@ -116,7 +116,8 @@ typedef struct MDV_Sample {
     uint8_t pan;
     uint8_t loop;
     uint8_t pingpong;
-    uint16_t sample_rate;
+     // 32:32
+    int64_t sample_inc;
     uint32_t data_size;
     int16_t* data;
 } MDV_Sample;
