@@ -24,6 +24,7 @@ typedef struct Voice {
     int32_t tremolo_phase;
     int32_t vibrato_sweep_position;
     int32_t vibrato_phase;
+    uint32_t channel_volume;  // Cached so it doesn't affect ending notes
     uint32_t volume;
     int64_t sample_inc;
      // 32:32 fixed point
@@ -351,9 +352,12 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                              * sines[v->tremolo_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
 
                              // Volume calculation.
-                            v->volume = (uint32_t)v->patch->volume * 128
-                                      * vols[ch->volume] / 0x10000
-                                      * vols[ch->expression] / 0x10000
+                            if (v->envelope_phase < 3) {
+                                v->channel_volume = (uint32_t)vols[ch->volume]
+                                                  * vols[ch->expression] / 0x10000;
+                            }
+                            v->volume = (uint32_t)v->patch->volume * 0x80
+                                      * v->channel_volume / 0x10000
                                       * vols[v->velocity] / 0x10000
                                       * envs[v->envelope_value / 0x100000] / 0x10000
                                       * (0x10000 + tremolo) / 0x10000;
