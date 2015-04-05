@@ -253,21 +253,24 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
     int buf_pos = 0;
     while (buf_pos < len) {
      // Advance event timeline.
-        while (!player->done && !player->ticks_to_event) {
-            do_event(player, &player->current->event);
-            uint32_t old_time = player->current->time;
-            player->current += 1;
-            if (player->current >= seq->events + seq->n_events) {
-                player->done = 1;
+        if (!player->samples_to_tick) {
+            while (!player->done && !player->ticks_to_event) {
+                do_event(player, &player->current->event);
+                uint32_t old_time = player->current->time;
+                player->current += 1;
+                if (player->current >= seq->events + seq->n_events) {
+                    player->done = 1;
+                }
+                else {
+                    player->ticks_to_event = player->current->time - old_time;
+                }
             }
-            else {
-                player->ticks_to_event = player->current->time - old_time;
-            }
+            if (!player->done)
+                --player->ticks_to_event;
+            player->samples_to_tick = player->tick_length;
         }
-        if (!player->done)
-            --player->ticks_to_event;
-        int chunk_length = player->tick_length < len - buf_pos
-                         ? player->tick_length : len - buf_pos;
+        int chunk_length = player->samples_to_tick < len - buf_pos
+                         ? player->samples_to_tick : len - buf_pos;
         if (chunk_length > MAX_CHUNK_LENGTH)
             chunk_length = MAX_CHUNK_LENGTH;
         player->samples_to_tick -= chunk_length;
