@@ -7,6 +7,13 @@
 
 #include "player_tables.c"
 
+typedef struct Voice_Sample {
+     // 32:32 fixed point, signed to make math easier
+    int64_t inc;
+    int64_t pos;
+    MDV_Sample* sample;
+} Voice_Sample;
+
 typedef struct Voice {
     uint8_t next;
     uint8_t note;
@@ -26,11 +33,9 @@ typedef struct Voice {
     int32_t vibrato_phase;
     uint32_t channel_volume;  // Cached so it doesn't affect ending notes
     uint32_t volume;
-    int64_t sample_inc;
-     // 32:32 fixed point
-     // Signed to make math easier
-    int64_t sample_pos;
-    MDV_Sample* sample;
+     // 0:32
+    uint32_t sample_mix;
+    Voice_Sample samples [2];
 } Voice;
 
 typedef struct Channel {
@@ -151,13 +156,18 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 v->velocity = event->param2;
                 v->backwards = 0;
                 v->control_timer = 1;
-                v->sample_pos = 0;
                 v->envelope_phase = 0;
                 v->envelope_value = 0;
                 v->tremolo_sweep_position = 0;
                 v->tremolo_phase = 0;
                 v->vibrato_sweep_position = 0;
                 v->vibrato_phase = 0;
+                v->sample_mix = 0;
+                for (int i = 0; i < 2; i++) {
+                    v->samples[i].inc = 0;
+                    v->samples[i].pos = 0;
+                    v->samples[i].sample = NULL;
+                }
                  // Decide which patch sample we're using
                 MDV_Patch* patch = event->channel == 9
                     ? player->bank.drums[v->note]
@@ -171,16 +181,42 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                     if (patch->note >= 0)
                         v->note = patch->note;
                     uint32_t freq = get_freq(v->note * 0x10000);
-                    v->sample = &patch->samples[0];
+                    uint32_t lower_freq = 0;
+                    uint32_t upper_freq = -1;
                     for (uint8_t i = 0; i < patch->n_samples; i++) {
-                        if (patch->samples[i].high_freq > freq) {
-                            v->sample = &patch->samples[i];
-                            break;
+                        if (patch->samples[i].root_freq > lower_freq
+                         && patch->samples[i].root_freq <= freq) {
+                            v->samples[0].sample = &patch->samples[i];
+                            lower_freq = patch->samples[i].root_freq;
                         }
+                        if (patch->samples[i].root_freq < upper_freq
+                         && patch->samples[i].root_freq >= freq) {
+                            v->samples[1].sample = &patch->samples[i];
+                            upper_freq = patch->samples[i].root_freq;
+                        }
+                    }
+                    if (!v->samples[0].sample) {
+                        v->samples[0].sample = v->samples[1].sample;
+                        v->samples[1].sample = NULL;
+                    }
+                    else if (!v->samples[1].sample) {
+                    }
+                    else {
+                         // Compare distance between notes, not frequencies.
+                         // (the scale doesn't matter so we're just taking
+                         //  any old logarithm and not worrying about it).
+                        double low = log(v->samples[0].sample->root_freq);
+                        double mid = log(freq);
+                        double high = log(v->samples[1].sample->root_freq);
+                        v->sample_mix = (mid - low) / (high - low)
+                                      * 0x100000000LL;
+                        printf("%g %g %g %g\n",
+                            low, mid, high, v->sample_mix * 1.0 / 0x100000000LL
+                        );
                     }
                 }
                 else {
-                    v->sample = NULL;
+                    v->samples[0].inc = get_freq(v->note * 0x10000) * 0x10000 / MDV_SAMPLE_RATE;
                 }
             }
             break;
@@ -305,15 +341,27 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     continue;
                 }
                 skip_delete_voice: { }
-                if (v->sample) {
+                if (v->samples[0].sample) {
                     for (int i = 0; i < chunk_length; i++) {
                          // Update volume and pitch only every once in a while
                         if (!--v->control_timer) {
                             v->control_timer = CONTROL_UPDATE_INTERVAL;
                              // Do envelopes  TODO: fade to 0 at end  TODO2: what did I mean when I wrote that
                             if (v->do_envelope) {
-                                uint32_t rate = v->sample->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL;
-                                uint32_t target = v->sample->envelope_offsets[v->envelope_phase];
+                                uint32_t rate = v->samples[0].sample->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL;
+                                uint32_t target = v->samples[0].sample->envelope_offsets[v->envelope_phase];
+                                if (v->sample_mix) {
+                                    uint32_t rate1 = v->samples[0].sample->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL;
+                                    uint32_t target1 = v->samples[0].sample->envelope_offsets[v->envelope_phase];
+                                    rate = (
+                                        rate * (0x100000000LL - v->sample_mix)
+                                      + rate1 * (uint64_t)v->sample_mix
+                                    ) / 0x100000000LL;
+                                    target = (
+                                        target * (0x100000000LL - v->sample_mix)
+                                      + target1 * (uint64_t)v->sample_mix
+                                    ) / 0x100000000LL;
+                                }
                                 if (target > v->envelope_value) {  // Get louder
                                     if (v->envelope_value + rate < target) {
                                         v->envelope_value += rate;
@@ -345,13 +393,33 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                             }
                             else { v->envelope_value = 0x3ff00000; }
                              // Tremolo
-                            v->tremolo_sweep_position += v->sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                            uint32_t ts = v->samples[0].sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                            uint32_t tp = v->samples[0].sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                            uint16_t td = v->samples[0].sample->tremolo_depth;
+                            if (v->sample_mix) {
+                                uint32_t ts1 = v->samples[1].sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                                uint32_t tp1 = v->samples[1].sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                                uint16_t td1 = v->samples[1].sample->tremolo_depth;
+                                ts = (
+                                    ts * (0x100000000LL - v->sample_mix)
+                                  + ts1 * (uint64_t)v->sample_mix
+                                ) / 0x100000000LL;
+                                tp = (
+                                    tp * (0x100000000LL - v->sample_mix)
+                                  + tp1 * (uint64_t)v->sample_mix
+                                ) / 0x100000000LL;
+                                td = (
+                                    td * (0x100000000LL - v->sample_mix)
+                                  + td1 * (uint64_t)v->sample_mix
+                                ) / 0x100000000LL;
+                            }
+                            v->tremolo_sweep_position += ts;
                             if (v->tremolo_sweep_position > 0x1000000)
                                 v->tremolo_sweep_position = 0x1000000;
-                            v->tremolo_phase += v->sample->tremolo_phase_increment * CONTROL_UPDATE_INTERVAL;
+                            v->tremolo_phase += tp;
                             if (v->tremolo_phase >= 0x1000000)
                                 v->tremolo_phase -= 0x1000000;
-                            uint32_t tremolo = v->sample->tremolo_depth
+                            uint32_t tremolo = td
                                              * v->tremolo_sweep_position / (0x1000000 / 0x80)
                                              * sines[v->tremolo_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
                              // Volume calculation.
@@ -365,28 +433,62 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                       * envs[v->envelope_value / 0x100000] / 0x10000
                                       * (0x10000 + tremolo) / 0x10000;
                              // Vibrato
-                            v->vibrato_sweep_position += v->sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                            uint32_t vs = v->samples[0].sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                            uint32_t vp = v->samples[0].sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                            uint16_t vd = v->samples[0].sample->vibrato_depth;
+                            if (v->sample_mix) {
+                                uint32_t vs1 = v->samples[1].sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                                uint32_t vp1 = v->samples[1].sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                                uint16_t vd1 = v->samples[1].sample->vibrato_depth;
+                                vs = (
+                                    vs * (0x100000000LL - v->sample_mix)
+                                  + vs1 * (uint64_t)v->sample_mix
+                                ) / 0x100000000LL;
+                                vp = (
+                                    vp * (0x100000000LL - v->sample_mix)
+                                  + vp1 * (uint64_t)v->sample_mix
+                                ) / 0x100000000LL;
+                                vd = (
+                                    vd * (0x100000000LL - v->sample_mix)
+                                  + vd1 * (uint64_t)v->sample_mix
+                                ) / 0x100000000LL;
+                            }
+                            v->vibrato_sweep_position += vs;
                             if (v->vibrato_sweep_position > 0x1000000)
                                 v->vibrato_sweep_position = 0x1000000;
-                            v->vibrato_phase += v->sample->vibrato_phase_increment * CONTROL_UPDATE_INTERVAL;
+                            v->vibrato_phase += vp;
                             if (v->vibrato_phase >= 0x1000000)
                                 v->vibrato_phase -= 0x1000000;
-                            uint32_t vibrato = v->sample->vibrato_depth
+                            uint32_t vibrato = vd
                                              * v->vibrato_sweep_position / (0x1000000 / 0x80)
                                              * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
                              // Notes are on a logarithmic scale, so we add instead of multiplying
                             uint32_t note = v->note * 0x10000
                                           + ch->pitch_bend * 0x10
                                           + vibrato * 4;  // Range over a whole step
-                            v->sample_inc = v->sample->sample_inc
-                                          * get_freq(note) / v->sample->root_freq;
+                            v->samples[0].inc = v->samples[0].sample->sample_inc
+                                              * get_freq(note) / v->samples[0].sample->root_freq;
+                            if (v->sample_mix) {
+                                v->samples[1].inc = v->samples[1].sample->sample_inc
+                                                  * get_freq(note) / v->samples[1].sample->root_freq;
+                            }
                         }
 
                          // Linear interpolation.
-                        uint32_t high = v->sample_pos / 0x100000000LL;
-                        uint64_t low = v->sample_pos % 0x100000000LL;
-                        int64_t samp = v->sample->data[high] * (0x100000000LL - low)
-                                     + v->sample->data[high + 1] * low;
+                        uint32_t high = v->samples[0].pos / 0x100000000LL;
+                        uint64_t low = v->samples[0].pos % 0x100000000LL;
+                        int64_t samp = v->samples[0].sample->data[high] * (0x100000000LL - low)
+                                     + v->samples[0].sample->data[high + 1] * low;
+                        if (v->sample_mix) {
+                            uint32_t high1 = v->samples[1].pos / 0x100000000LL;
+                            uint64_t low1 = v->samples[1].pos % 0x100000000LL;
+                            int64_t samp1 = v->samples[1].sample->data[high1] * (0x100000000LL - low1)
+                                          + v->samples[1].sample->data[high1 + 1] * low1;
+                            samp = (
+                                samp / 0x100000000LL * (0x100000000LL - v->sample_mix)
+                              + samp1 / 0x100000000LL * (uint64_t)v->sample_mix
+                            );
+                        }
                          // Write!
                         uint64_t val = samp / 0x100000000LL * v->volume / 0x10000;
                         chunk[i][0] += val * (64 + ch->pan) / 64;
@@ -394,29 +496,57 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                          // Move sample position forward (or backward)
                          // TODO: go all the way to sample end if no loop
                         if (v->backwards) {
-                            v->sample_pos -= v->sample_inc;
-                            if (v->sample_pos < v->sample->loop_start) {
+                            v->samples[0].pos -= v->samples[0].inc;
+                            if (v->samples[0].pos < v->samples[0].sample->loop_start) {
                                 if (v->do_loop) {
                                      // pingpong assumed
                                     v->backwards = 0;
-                                    v->sample_pos = 2 * v->sample->loop_start - v->sample_pos;
+                                    v->samples[0].pos = 2 * v->samples[0].sample->loop_start - v->samples[0].pos;
                                 }
                                 else goto delete_voice;
                             }
                         }
                         else {
-                            v->sample_pos += v->sample_inc;
-                            if (v->sample_pos >= v->sample->loop_end) {
+                            v->samples[0].pos += v->samples[0].inc;
+                            if (v->samples[0].pos >= v->samples[0].sample->loop_end) {
                                 if (v->do_loop) {
-                                    if (v->sample->pingpong) {
+                                    if (v->samples[0].sample->pingpong) {
                                         v->backwards = 1;
-                                        v->sample_pos = 2 * v->sample->loop_end - v->sample_pos;
+                                        v->samples[0].pos = 2 * v->samples[0].sample->loop_end - v->samples[0].pos;
                                     }
                                     else {
-                                        v->sample_pos -= v->sample->loop_end - v->sample->loop_start;
+                                        v->samples[0].pos -= v->samples[0].sample->loop_end - v->samples[0].sample->loop_start;
                                     }
                                 }
                                 else goto delete_voice;
+                            }
+                        }
+                        if (v->sample_mix) {
+                            if (v->backwards) {
+                                v->samples[1].pos -= v->samples[1].inc;
+                                if (v->samples[1].pos < v->samples[1].sample->loop_start) {
+                                    if (v->do_loop) {
+                                         // pingpong assumed
+                                        v->backwards = 0;
+                                        v->samples[1].pos = 2 * v->samples[1].sample->loop_start - v->samples[1].pos;
+                                    }
+                                    else goto delete_voice;
+                                }
+                            }
+                            else {
+                                v->samples[1].pos += v->samples[1].inc;
+                                if (v->samples[1].pos >= v->samples[1].sample->loop_end) {
+                                    if (v->do_loop) {
+                                        if (v->samples[1].sample->pingpong) {
+                                            v->backwards = 1;
+                                            v->samples[1].pos = 2 * v->samples[1].sample->loop_end - v->samples[1].pos;
+                                        }
+                                        else {
+                                            v->samples[1].pos -= v->samples[1].sample->loop_end - v->samples[1].sample->loop_start;
+                                        }
+                                    }
+                                    else goto delete_voice;
+                                }
                             }
                         }
                     }
@@ -424,15 +554,14 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                 else {  // No patch, do a square wave!
                     for (int i = 0; i < chunk_length; i++) {
                          // Loop
-                        v->sample_pos %= 0x100000000LL;
+                        v->samples[0].pos %= 0x100000000LL;
                          // Add value
-                        int32_t sign = v->sample_pos < 0x80000000LL ? -1 : 1;
+                        int32_t sign = v->samples[0].pos < 0x80000000LL ? -1 : 1;
                         uint32_t val = sign * v->velocity * ch->volume * ch->expression / (32*127);
                         chunk[i][0] += val;
                         chunk[i][1] += val;
                          // Move position
-                        uint32_t freq = get_freq(v->note << 8);
-                        v->sample_pos += 0x100000000LL * freq / 1000 / MDV_SAMPLE_RATE;
+                        v->samples[0].pos += v->samples[0].inc;
                     }
                 }
             }
