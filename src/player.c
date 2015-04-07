@@ -281,235 +281,326 @@ void mdv_fast_forward_to_note (MDV_Player* player) {
     player->ticks_to_event = 0;
 }
 
-#define MAX_CHUNK_LENGTH 512
+static uint64_t mix_u (uint32_t a, uint32_t b, uint64_t mix) {
+    return a * (0x100000000LL - mix) + b * mix;
+}
+static int64_t mix_i (int32_t a, int32_t b, uint64_t mix) {
+    return a * (0x100000000LL - mix) + b * mix;
+}
 
  // Delete voice if returns true
-static int render_voice (Channel* ch, Voice* v, int32_t (* chunk )[2], int chunk_length) {
-    if (v->samples[0].sample) {
-        for (int i = 0; i < chunk_length; i++) {
-             // Update volume and pitch only every once in a while
-            if (!--v->control_timer) {
-                v->control_timer = CONTROL_UPDATE_INTERVAL;
-                 // Do envelopes  TODO: fade to 0 at end  TODO2: what did I mean when I wrote that
-                if (v->do_envelope) {
-                    uint32_t rate = v->samples[0].sample->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL;
-                    uint32_t target = v->samples[0].sample->envelope_offsets[v->envelope_phase];
-                    if (v->sample_mix) {
-                        uint32_t rate1 = v->samples[0].sample->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL;
-                        uint32_t target1 = v->samples[0].sample->envelope_offsets[v->envelope_phase];
-                        rate = (
-                            rate * (0x100000000LL - v->sample_mix)
-                          + rate1 * (uint64_t)v->sample_mix
-                        ) / 0x100000000LL;
-                        target = (
-                            target * (0x100000000LL - v->sample_mix)
-                          + target1 * (uint64_t)v->sample_mix
-                        ) / 0x100000000LL;
+static int render_voice_normal (Channel* ch, Voice* v, int32_t (* chunk )[2], int chunk_length) {
+    MDV_Sample* s0 = v->samples[0].sample;
+    for (int i = 0; i < chunk_length; i++) {
+         // Update volume and pitch only every once in a while
+        if (!--v->control_timer) {
+            v->control_timer = CONTROL_UPDATE_INTERVAL;
+             // Do envelopes  TODO: fade to 0 at end  TODO2: what did I mean when I wrote that
+            if (v->do_envelope) {
+                uint32_t rate = s0->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL;
+                uint32_t target = s0->envelope_offsets[v->envelope_phase];
+                if (target > v->envelope_value) {  // Get louder
+                    if (v->envelope_value + rate < target) {
+                        v->envelope_value += rate;
                     }
-                    if (target > v->envelope_value) {  // Get louder
-                        if (v->envelope_value + rate < target) {
-                            v->envelope_value += rate;
-                        }
-                        else if (v->envelope_phase == 5) {
-                            return 1;
-                        }
-                        else {
-                            v->envelope_value = target;
-                            if (v->envelope_phase != 2) {
-                                v->envelope_phase += 1;
-                            }
-                        }
+                    else if (v->envelope_phase == 5) {
+                        return 1;
                     }
-                    else {  // Get quieter
-                        if (target + rate < v->envelope_value) {
-                            v->envelope_value -= rate;
-                        }
-                        else if (v->envelope_phase == 5 || target == 0) {
-                            return 1;
-                        }
-                        else {
-                            v->envelope_value = target;
-                            if (v->envelope_phase != 2) {
-                                v->envelope_phase += 1;
-                            }
+                    else {
+                        v->envelope_value = target;
+                        if (v->envelope_phase != 2) {
+                            v->envelope_phase += 1;
                         }
                     }
                 }
-                else { v->envelope_value = 0x3ff00000; }
-                 // Tremolo
-                uint32_t ts = v->samples[0].sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                uint32_t tp = v->samples[0].sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                uint16_t td = v->samples[0].sample->tremolo_depth;
-                if (v->sample_mix) {
-                    uint32_t ts1 = v->samples[1].sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                    uint32_t tp1 = v->samples[1].sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                    uint16_t td1 = v->samples[1].sample->tremolo_depth;
-                    ts = (
-                        ts * (0x100000000LL - v->sample_mix)
-                      + ts1 * (uint64_t)v->sample_mix
-                    ) / 0x100000000LL;
-                    tp = (
-                        tp * (0x100000000LL - v->sample_mix)
-                      + tp1 * (uint64_t)v->sample_mix
-                    ) / 0x100000000LL;
-                    td = (
-                        td * (0x100000000LL - v->sample_mix)
-                      + td1 * (uint64_t)v->sample_mix
-                    ) / 0x100000000LL;
-                }
-                v->tremolo_sweep_position += ts;
-                if (v->tremolo_sweep_position > 0x1000000)
-                    v->tremolo_sweep_position = 0x1000000;
-                v->tremolo_phase += tp;
-                if (v->tremolo_phase >= 0x1000000)
-                    v->tremolo_phase -= 0x1000000;
-                uint32_t tremolo = td
-                                 * v->tremolo_sweep_position / (0x1000000 / 0x80)
-                                 * sines[v->tremolo_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
-                 // Volume calculation.
-                if (v->envelope_phase < 3) {
-                    v->channel_volume = (uint32_t)vols[ch->volume]
-                                      * vols[ch->expression] / 0x10000;
-                }
-                v->volume = (uint32_t)v->patch_volume * 0x80
-                          * v->channel_volume / 0x10000
-                          * vols[v->velocity] / 0x10000
-                          * envs[v->envelope_value / 0x100000] / 0x10000
-                          * (0x10000 + tremolo) / 0x10000;
-                 // Vibrato
-                uint32_t vs = v->samples[0].sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                uint32_t vp = v->samples[0].sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                uint16_t vd = v->samples[0].sample->vibrato_depth;
-                if (v->sample_mix) {
-                    uint32_t vs1 = v->samples[1].sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                    uint32_t vp1 = v->samples[1].sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                    uint16_t vd1 = v->samples[1].sample->vibrato_depth;
-                    vs = (
-                        vs * (0x100000000LL - v->sample_mix)
-                      + vs1 * (uint64_t)v->sample_mix
-                    ) / 0x100000000LL;
-                    vp = (
-                        vp * (0x100000000LL - v->sample_mix)
-                      + vp1 * (uint64_t)v->sample_mix
-                    ) / 0x100000000LL;
-                    vd = (
-                        vd * (0x100000000LL - v->sample_mix)
-                      + vd1 * (uint64_t)v->sample_mix
-                    ) / 0x100000000LL;
-                }
-                v->vibrato_sweep_position += vs;
-                if (v->vibrato_sweep_position > 0x1000000)
-                    v->vibrato_sweep_position = 0x1000000;
-                v->vibrato_phase += vp;
-                if (v->vibrato_phase >= 0x1000000)
-                    v->vibrato_phase -= 0x1000000;
-                uint32_t vibrato = vd
-                                 * v->vibrato_sweep_position / (0x1000000 / 0x80)
-                                 * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
-                 // Notes are on a logarithmic scale, so we add instead of multiplying
-                uint32_t note = v->note * 0x10000
-                              + ch->pitch_bend * 0x10
-                              + vibrato * 4;  // Range over a whole step
-                v->samples[0].inc = v->samples[0].sample->sample_inc
-                                  * get_freq(note) / v->samples[0].sample->root_freq;
-                if (v->sample_mix) {
-                    v->samples[1].inc = v->samples[1].sample->sample_inc
-                                      * get_freq(note) / v->samples[1].sample->root_freq;
+                else {  // Get quieter
+                    if (target + rate < v->envelope_value) {
+                        v->envelope_value -= rate;
+                    }
+                    else if (v->envelope_phase == 5 || target == 0) {
+                        return 1;
+                    }
+                    else {
+                        v->envelope_value = target;
+                        if (v->envelope_phase != 2) {
+                            v->envelope_phase += 1;
+                        }
+                    }
                 }
             }
+            else { v->envelope_value = 0x3ff00000; }
+             // Tremolo
+            uint32_t tremolo_sweep_inc = s0->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
+            uint32_t tremolo_phase_inc = s0->tremolo_phase_increment * CONTROL_UPDATE_INTERVAL;
+            uint16_t tremolo_depth = s0->tremolo_depth;
+            v->tremolo_sweep_position += tremolo_sweep_inc;
+            if (v->tremolo_sweep_position > 0x1000000)
+                v->tremolo_sweep_position = 0x1000000;
+            v->tremolo_phase += tremolo_phase_inc;
+            if (v->tremolo_phase >= 0x1000000)
+                v->tremolo_phase -= 0x1000000;
+            uint32_t tremolo = tremolo_depth
+                             * v->tremolo_sweep_position / (0x1000000 / 0x80)
+                             * sines[v->tremolo_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
+             // Volume calculation.
+            if (v->envelope_phase < 3) {
+                v->channel_volume = (uint32_t)vols[ch->volume]
+                                  * vols[ch->expression] / 0x10000;
+            }
+            v->volume = (uint32_t)v->patch_volume * 0x80
+                      * v->channel_volume / 0x10000
+                      * vols[v->velocity] / 0x10000
+                      * envs[v->envelope_value / 0x100000] / 0x10000
+                      * (0x10000 + tremolo) / 0x10000;
+             // Vibrato
+            uint32_t vibrato_sweep_inc = s0->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
+            uint32_t vibrato_phase_inc = s0->vibrato_phase_increment * CONTROL_UPDATE_INTERVAL;
+            uint16_t vibrato_depth = s0->vibrato_depth;
+            v->vibrato_sweep_position += vibrato_sweep_inc;
+            if (v->vibrato_sweep_position > 0x1000000)
+                v->vibrato_sweep_position = 0x1000000;
+            v->vibrato_phase += vibrato_phase_inc;
+            if (v->vibrato_phase >= 0x1000000)
+                v->vibrato_phase -= 0x1000000;
+            uint32_t vibrato = vibrato_depth
+                             * v->vibrato_sweep_position / (0x1000000 / 0x80)
+                             * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
+             // Notes are on a logarithmic scale, so we add instead of multiplying
+            uint32_t note = v->note * 0x10000
+                          + ch->pitch_bend * 0x10
+                          + vibrato * 4;  // Range over a whole step
+            v->samples[0].inc = v->samples[0].sample->sample_inc
+                              * get_freq(note) / v->samples[0].sample->root_freq;
+        }
 
-             // Linear interpolation.
-            uint32_t high = v->samples[0].pos / 0x100000000LL;
-            uint64_t low = v->samples[0].pos % 0x100000000LL;
-            int64_t samp = v->samples[0].sample->data[high] * (0x100000000LL - low)
-                         + v->samples[0].sample->data[high + 1] * low;
-            if (v->sample_mix) {
-                uint32_t high1 = v->samples[1].pos / 0x100000000LL;
-                uint64_t low1 = v->samples[1].pos % 0x100000000LL;
-                int64_t samp1 = v->samples[1].sample->data[high1] * (0x100000000LL - low1)
-                              + v->samples[1].sample->data[high1 + 1] * low1;
-                samp = (
-                    samp / 0x100000000LL * (0x100000000LL - v->sample_mix)
-                  + samp1 / 0x100000000LL * (uint64_t)v->sample_mix
-                );
+         // Linear interpolation.
+        int64_t samp = mix_i(
+            s0->data[v->samples[0].pos / 0x100000000LL],
+            s0->data[v->samples[0].pos / 0x100000000LL + 1],
+            v->samples[0].pos % 0x100000000LL
+        );
+         // Write!
+        uint64_t val = samp / 0x100000000LL * v->volume / 0x10000;
+        chunk[i][0] += val * (64 + ch->pan) / 64;
+        chunk[i][1] += val * (64 - ch->pan) / 64;
+         // Move sample positions forward (or backward)
+         // TODO: go all the way to sample end if no loop
+        if (v->backwards) {
+            v->samples[0].pos -= v->samples[0].inc;
+            if (v->samples[0].pos < v->samples[0].sample->loop_start) {
+                if (v->do_loop && v->samples[0].sample->loop) {
+                     // pingpong assumed
+                    v->backwards = 0;
+                    v->samples[0].pos = 2 * v->samples[0].sample->loop_start - v->samples[0].pos;
+                }
+                else return 1;
             }
-             // Write!
-            uint64_t val = samp / 0x100000000LL * v->volume / 0x10000;
-            chunk[i][0] += val * (64 + ch->pan) / 64;
-            chunk[i][1] += val * (64 - ch->pan) / 64;
-             // Move sample position forward (or backward)
-             // TODO: go all the way to sample end if no loop
+        }
+        else {
+            v->samples[0].pos += v->samples[0].inc;
+            if (v->samples[0].pos >= v->samples[0].sample->loop_end) {
+                if (v->do_loop && v->samples[0].sample->loop) {
+                    if (v->samples[0].sample->pingpong) {
+                        v->backwards = 1;
+                        v->samples[0].pos = 2 * v->samples[0].sample->loop_end - v->samples[0].pos;
+                    }
+                    else {
+                        v->samples[0].pos -= v->samples[0].sample->loop_end - v->samples[0].sample->loop_start;
+                    }
+                }
+                else return 1;
+            }
+        }
+    }
+    return 0;
+}
+static int render_voice_intersample (Channel* ch, Voice* v, int32_t (* chunk )[2], int chunk_length) {
+    MDV_Sample* s0 = v->samples[0].sample;
+    MDV_Sample* s1 = v->samples[1].sample;
+    for (int i = 0; i < chunk_length; i++) {
+         // Update volume and pitch only every once in a while
+        if (!--v->control_timer) {
+            v->control_timer = CONTROL_UPDATE_INTERVAL;
+             // Do envelopes  TODO: fade to 0 at end  TODO2: what did I mean when I wrote that
+            if (v->do_envelope) {
+                uint32_t rate = mix_u(
+                    s0->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL,
+                    s1->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL,
+                    v->sample_mix
+                ) / 0x100000000LL;
+                uint32_t target = mix_i(
+                    s0->envelope_offsets[v->envelope_phase],
+                    s1->envelope_offsets[v->envelope_phase],
+                    v->sample_mix
+                ) / 0x100000000LL;
+                if (target > v->envelope_value) {  // Get louder
+                    if (v->envelope_value + rate < target) {
+                        v->envelope_value += rate;
+                    }
+                    else if (v->envelope_phase == 5) {
+                        return 1;
+                    }
+                    else {
+                        v->envelope_value = target;
+                        if (v->envelope_phase != 2) {
+                            v->envelope_phase += 1;
+                        }
+                    }
+                }
+                else {  // Get quieter
+                    if (target + rate < v->envelope_value) {
+                        v->envelope_value -= rate;
+                    }
+                    else if (v->envelope_phase == 5 || target == 0) {
+                        return 1;
+                    }
+                    else {
+                        v->envelope_value = target;
+                        if (v->envelope_phase != 2) {
+                            v->envelope_phase += 1;
+                        }
+                    }
+                }
+            }
+            else { v->envelope_value = 0x3ff00000; }
+             // Tremolo
+            uint32_t tremolo_sweep_inc = mix_u(
+                s0->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL,
+                s1->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL,
+                v->sample_mix
+            ) / 0x100000000LL;
+            uint32_t tremolo_phase_inc = mix_u(
+                s0->tremolo_phase_increment * CONTROL_UPDATE_INTERVAL,
+                s1->tremolo_phase_increment * CONTROL_UPDATE_INTERVAL,
+                v->sample_mix
+            ) / 0x100000000LL;
+            uint16_t tremolo_depth = mix_u(
+                s0->tremolo_depth,
+                s1->tremolo_depth,
+                v->sample_mix
+            ) / 0x100000000LL;
+            v->tremolo_sweep_position += tremolo_sweep_inc;
+            if (v->tremolo_sweep_position > 0x1000000)
+                v->tremolo_sweep_position = 0x1000000;
+            v->tremolo_phase += tremolo_phase_inc;
+            if (v->tremolo_phase >= 0x1000000)
+                v->tremolo_phase -= 0x1000000;
+            uint32_t tremolo = tremolo_depth
+                             * v->tremolo_sweep_position / (0x1000000 / 0x80)
+                             * sines[v->tremolo_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
+             // Volume calculation.
+            if (v->envelope_phase < 3) {
+                v->channel_volume = (uint32_t)vols[ch->volume]
+                                  * vols[ch->expression] / 0x10000;
+            }
+            v->volume = (uint32_t)v->patch_volume * 0x80
+                      * v->channel_volume / 0x10000
+                      * vols[v->velocity] / 0x10000
+                      * envs[v->envelope_value / 0x100000] / 0x10000
+                      * (0x10000 + tremolo) / 0x10000;
+             // Vibrato
+            uint32_t vibrato_sweep_inc = mix_u(
+                s0->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL,
+                s1->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL,
+                v->sample_mix
+            ) / 0x100000000LL;
+            uint32_t vibrato_phase_inc = mix_u(
+                s0->vibrato_phase_increment * CONTROL_UPDATE_INTERVAL,
+                s1->vibrato_phase_increment * CONTROL_UPDATE_INTERVAL,
+                v->sample_mix
+            ) / 0x100000000LL;
+            uint16_t vibrato_depth = mix_u(
+                s0->vibrato_depth,
+                s1->vibrato_depth,
+                v->sample_mix
+            ) / 0x100000000LL;
+            v->vibrato_sweep_position += vibrato_sweep_inc;
+            if (v->vibrato_sweep_position > 0x1000000)
+                v->vibrato_sweep_position = 0x1000000;
+            v->vibrato_phase += vibrato_phase_inc;
+            if (v->vibrato_phase >= 0x1000000)
+                v->vibrato_phase -= 0x1000000;
+            uint32_t vibrato = vibrato_depth
+                             * v->vibrato_sweep_position / (0x1000000 / 0x80)
+                             * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
+             // Notes are on a logarithmic scale, so we add instead of multiplying
+            uint32_t note = v->note * 0x10000
+                          + ch->pitch_bend * 0x10
+                          + vibrato * 4;  // Range over a whole step
+            v->samples[0].inc = v->samples[0].sample->sample_inc
+                              * get_freq(note) / v->samples[0].sample->root_freq;
+            v->samples[1].inc = v->samples[1].sample->sample_inc
+                              * get_freq(note) / v->samples[1].sample->root_freq;
+        }
+
+         // Linear interpolation.
+        int64_t samp = mix_i(
+            mix_i(
+                s0->data[v->samples[0].pos / 0x100000000LL],
+                s0->data[v->samples[0].pos / 0x100000000LL + 1],
+                v->samples[0].pos % 0x100000000LL
+            ) / 0x100000000LL,
+            mix_i(
+                s1->data[v->samples[1].pos / 0x100000000LL],
+                s1->data[v->samples[1].pos / 0x100000000LL + 1],
+                v->samples[1].pos % 0x100000000LL
+            ) / 0x100000000LL,
+            v->sample_mix
+        );
+         // Write!
+        uint64_t val = samp / 0x100000000LL * v->volume / 0x10000;
+        chunk[i][0] += val * (64 + ch->pan) / 64;
+        chunk[i][1] += val * (64 - ch->pan) / 64;
+         // Move sample positions forward (or backward)
+         // TODO: go all the way to sample end if no loop
+        for (int i = 0; i < 2; i++) {
             if (v->backwards) {
-                v->samples[0].pos -= v->samples[0].inc;
-                if (v->samples[0].pos < v->samples[0].sample->loop_start) {
-                    if (v->do_loop) {
+                v->samples[i].pos -= v->samples[i].inc;
+                if (v->samples[i].pos < v->samples[i].sample->loop_start) {
+                    if (v->do_loop && v->samples[i].sample->loop) {
                          // pingpong assumed
                         v->backwards = 0;
-                        v->samples[0].pos = 2 * v->samples[0].sample->loop_start - v->samples[0].pos;
+                        v->samples[i].pos = 2 * v->samples[i].sample->loop_start - v->samples[i].pos;
                     }
                     else return 1;
                 }
             }
             else {
-                v->samples[0].pos += v->samples[0].inc;
-                if (v->samples[0].pos >= v->samples[0].sample->loop_end) {
-                    if (v->do_loop) {
-                        if (v->samples[0].sample->pingpong) {
+                v->samples[i].pos += v->samples[i].inc;
+                if (v->samples[i].pos >= v->samples[i].sample->loop_end) {
+                    if (v->do_loop && v->samples[i].sample->loop) {
+                        if (v->samples[i].sample->pingpong) {
                             v->backwards = 1;
-                            v->samples[0].pos = 2 * v->samples[0].sample->loop_end - v->samples[0].pos;
+                            v->samples[i].pos = 2 * v->samples[i].sample->loop_end - v->samples[i].pos;
                         }
                         else {
-                            v->samples[0].pos -= v->samples[0].sample->loop_end - v->samples[0].sample->loop_start;
+                            v->samples[i].pos -= v->samples[i].sample->loop_end - v->samples[i].sample->loop_start;
                         }
                     }
                     else return 1;
                 }
             }
-            if (v->sample_mix) {
-                if (v->backwards) {
-                    v->samples[1].pos -= v->samples[1].inc;
-                    if (v->samples[1].pos < v->samples[1].sample->loop_start) {
-                        if (v->do_loop) {
-                             // pingpong assumed
-                            v->backwards = 0;
-                            v->samples[1].pos = 2 * v->samples[1].sample->loop_start - v->samples[1].pos;
-                        }
-                        else return 1;
-                    }
-                }
-                else {
-                    v->samples[1].pos += v->samples[1].inc;
-                    if (v->samples[1].pos >= v->samples[1].sample->loop_end) {
-                        if (v->do_loop) {
-                            if (v->samples[1].sample->pingpong) {
-                                v->backwards = 1;
-                                v->samples[1].pos = 2 * v->samples[1].sample->loop_end - v->samples[1].pos;
-                            }
-                            else {
-                                v->samples[1].pos -= v->samples[1].sample->loop_end - v->samples[1].sample->loop_start;
-                            }
-                        }
-                        else return 1;
-                    }
-                }
-            }
-        }
-    }
-    else {  // No patch, do a square wave!
-        for (int i = 0; i < chunk_length; i++) {
-             // Loop
-            v->samples[0].pos %= 0x100000000LL;
-             // Add value
-            int32_t sign = v->samples[0].pos < 0x80000000LL ? -1 : 1;
-            uint32_t val = sign * v->velocity * ch->volume * ch->expression / (32*127);
-            chunk[i][0] += val;
-            chunk[i][1] += val;
-             // Move position
-            v->samples[0].pos += v->samples[0].inc;
         }
     }
     return 0;
 }
+
+static int render_square (Channel* ch, Voice* v, int32_t (* chunk )[2], int chunk_length) {
+    for (int i = 0; i < chunk_length; i++) {
+         // Loop
+        v->samples[0].pos %= 0x100000000LL;
+         // Add value
+        int32_t sign = v->samples[0].pos < 0x80000000LL ? -1 : 1;
+        uint32_t val = sign * v->velocity * ch->volume * ch->expression / (32*127);
+        chunk[i][0] += val;
+        chunk[i][1] += val;
+         // Move position
+        v->samples[0].pos += v->samples[0].inc;
+    }
+    return 0;
+}
+
+#define MAX_CHUNK_LENGTH 512
 
 void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
     int16_t(* buf )[2] = (int16_t(*)[2])buf_;
@@ -555,7 +646,13 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
             uint8_t* vip = &ch->voices;
             while (*vip != 255) {
                 Voice* v = &player->voices[*vip];
-                int do_delete = render_voice(ch, v, chunk, chunk_length);
+                int do_delete;
+                if (v->samples[0].sample && v->samples[1].sample)
+                    do_delete = render_voice_intersample(ch, v, chunk, chunk_length);
+                else if (v->samples[0].sample)
+                    do_delete = render_voice_normal(ch, v, chunk, chunk_length);
+                else
+                    do_delete = render_square(ch, v, chunk, chunk_length);
                 if (do_delete) {
                     *vip = v->next;
                     v->next = player->inactive;
