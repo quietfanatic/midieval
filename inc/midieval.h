@@ -103,9 +103,9 @@ typedef struct MDV_Sample {
     uint32_t low_freq;
     uint32_t high_freq;
     uint32_t root_freq;
-     // in samples
-    uint32_t loop_start;
-    uint32_t loop_end;
+     // 32:32 in samples
+    int64_t loop_start;
+    int64_t loop_end;
     uint32_t envelope_rates [6];
     uint32_t envelope_offsets [6];
      // 8:24 fixed point, I think

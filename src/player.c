@@ -395,25 +395,25 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                          // TODO: go all the way to sample end if no loop
                         if (v->backwards) {
                             v->sample_pos -= v->sample_inc;
-                            if (v->sample_pos < v->sample->loop_start * 0x100000000LL) {
+                            if (v->sample_pos < v->sample->loop_start) {
                                 if (v->do_loop) {
                                      // pingpong assumed
                                     v->backwards = 0;
-                                    v->sample_pos = 2 * v->sample->loop_start * 0x100000000LL - v->sample_pos;
+                                    v->sample_pos = 2 * v->sample->loop_start - v->sample_pos;
                                 }
                                 else goto delete_voice;
                             }
                         }
                         else {
                             v->sample_pos += v->sample_inc;
-                            if (v->sample_pos >= v->sample->loop_end * 0x100000000LL) {
+                            if (v->sample_pos >= v->sample->loop_end) {
                                 if (v->do_loop) {
                                     if (v->sample->pingpong) {
                                         v->backwards = 1;
-                                        v->sample_pos = 2 * v->sample->loop_end * 0x100000000LL - v->sample_pos;
+                                        v->sample_pos = 2 * v->sample->loop_end - v->sample_pos;
                                     }
                                     else {
-                                        v->sample_pos -= (v->sample->loop_end - v->sample->loop_start) * 0x100000000LL;
+                                        v->sample_pos -= v->sample->loop_end - v->sample->loop_start;
                                     }
                                 }
                                 else goto delete_voice;

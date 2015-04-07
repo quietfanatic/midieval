@@ -123,13 +123,13 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
     }
     for (uint8_t i = 0; i < pat->n_samples; i++) {
         skip(f, 7);  // Wave name
-        if (read_u8(f) != 0) {
-//            printf("Warning: NYI non-zero fractions byte (?) in %s\n", filename);
-        }
+        uint8_t fractions = read_u8(f);
         pat->samples[i].data_size = read_u32(f) / 2;
-        pat->samples[i].loop_start = read_u32(f);
+        pat->samples[i].loop_start = read_u32(f) * 0x100000000LL
+                                   + (fractions & 0xf) * 0x010000000LL;
         pat->samples[i].loop_start /= 2;
-        pat->samples[i].loop_end = read_u32(f);
+        pat->samples[i].loop_end = read_u32(f) * 0x100000000LL
+                                   + ((fractions >> 4) & 0xf) * 0x010000000LL;
         pat->samples[i].loop_end /= 2;
         pat->samples[i].sample_inc = read_u16(f) * 0x100000000LL / MDV_SAMPLE_RATE;
         pat->samples[i].low_freq = read_u32(f) * 0x10000LL / 1000;
@@ -214,8 +214,8 @@ void mdv_print_patch (MDV_Patch* pat) {
         printf("    low_freq: %u\n", pat->samples[i].low_freq);
         printf("    high_freq: %u\n", pat->samples[i].high_freq);
         printf("    root_freq: %u\n", pat->samples[i].root_freq);
-        printf("    loop_start: %u\n", pat->samples[i].loop_start);
-        printf("    loop_end: %u\n", pat->samples[i].loop_end);
+        printf("    loop_start: %llu\n", (long long unsigned)pat->samples[i].loop_start);
+        printf("    loop_end: %llu\n", (long long unsigned)pat->samples[i].loop_end);
         printf("    envelope_rates: %u %u %u %u %u %u\n",
             pat->samples[i].envelope_rates[0], pat->samples[i].envelope_rates[1],
             pat->samples[i].envelope_rates[2], pat->samples[i].envelope_rates[3],
