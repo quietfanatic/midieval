@@ -1,7 +1,6 @@
 #include "midieval.h"
 
-#define VOLUME_UPDATE_INTERVAL 16
-#define PITCH_UPDATE_INTERVAL 16
+#define CONTROL_UPDATE_INTERVAL 16
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,8 +14,7 @@ typedef struct Voice {
     uint8_t sample_index;
     uint8_t backwards;
     uint8_t envelope_phase;
-    uint8_t volume_timer;
-    uint8_t pitch_timer;
+    uint8_t control_timer;
      // 15:15 (?) fixed point
     uint32_t envelope_value;
      // 8:24
@@ -91,7 +89,7 @@ MDV_Player* mdv_new_player () {
 }
 void mdv_free_player (MDV_Player* player) {
     mdv_bank_free_patches(&player->bank);
-    fprintf(stderr, "Clip count: %llu\n", player->clip_count);
+    fprintf(stderr, "Clip count: %llu\n", (long long unsigned)player->clip_count);
     free(player);
 }
 
@@ -148,8 +146,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 v->note = event->param1;
                 v->velocity = event->param2;
                 v->backwards = 0;
-                v->volume_timer = 1;
-                v->pitch_timer = 1;
+                v->control_timer = 1;
                 v->sample_pos = 0;
                 v->sample_index = 0;
                 v->envelope_phase = 0;
@@ -306,14 +303,15 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                 if (v->patch) {
                     MDV_Sample* sample = &v->patch->samples[v->sample_index];
                     for (int i = 0; i < chunk_length; i++) {
-                        if (!--v->volume_timer) {
-                            v->volume_timer = VOLUME_UPDATE_INTERVAL;
+                         // Update volume and pitch only every once in a while
+                        if (!--v->control_timer) {
+                            v->control_timer = CONTROL_UPDATE_INTERVAL;
                              // Do envelopes  TODO: fade to 0 at end
                             if (no_envelope) {
                                 v->envelope_value = 0x3ff00000;
                             }
                             else {
-                                uint32_t rate = sample->envelope_rates[v->envelope_phase] * VOLUME_UPDATE_INTERVAL;
+                                uint32_t rate = sample->envelope_rates[v->envelope_phase] * CONTROL_UPDATE_INTERVAL;
                                 uint32_t target = sample->envelope_offsets[v->envelope_phase];
                                 if (target > v->envelope_value) {  // Get louder
                                     if (v->envelope_value + rate < target) {
@@ -345,16 +343,15 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                 }
                             }
                              // Tremolo
-                            v->tremolo_sweep_position += sample->tremolo_sweep_increment * VOLUME_UPDATE_INTERVAL;
+                            v->tremolo_sweep_position += sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
                             if (v->tremolo_sweep_position > 0x1000000)
                                 v->tremolo_sweep_position = 0x1000000;
-                            v->tremolo_phase += sample->tremolo_phase_increment * VOLUME_UPDATE_INTERVAL;
+                            v->tremolo_phase += sample->tremolo_phase_increment * CONTROL_UPDATE_INTERVAL;
                             if (v->tremolo_phase >= 0x1000000)
                                 v->tremolo_phase -= 0x1000000;
                             uint32_t tremolo = sample->tremolo_depth
                                              * v->tremolo_sweep_position / (0x1000000 / 0x80)
                                              * sines[v->tremolo_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
-
                              // Volume calculation.
                             if (v->envelope_phase < 3) {
                                 v->channel_volume = (uint32_t)vols[ch->volume]
@@ -365,7 +362,24 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                       * vols[v->velocity] / 0x10000
                                       * envs[v->envelope_value / 0x100000] / 0x10000
                                       * (0x10000 + tremolo) / 0x10000;
+                             // Vibrato
+                            v->vibrato_sweep_position += sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
+                            if (v->vibrato_sweep_position > 0x1000000)
+                                v->vibrato_sweep_position = 0x1000000;
+                            v->vibrato_phase += sample->vibrato_phase_increment * CONTROL_UPDATE_INTERVAL;
+                            if (v->vibrato_phase >= 0x1000000)
+                                v->vibrato_phase -= 0x1000000;
+                            uint32_t vibrato = sample->vibrato_depth
+                                             * v->vibrato_sweep_position / (0x1000000 / 0x80)
+                                             * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
+                             // Notes are on a logarithmic scale, so we add instead of multiplying
+                            uint32_t note = v->note * 0x10000
+                                          + ch->pitch_bend * 0x10
+                                          + vibrato * 4;  // Range over a whole step
+                            v->sample_inc = sample->sample_inc
+                                          * get_freq(note) / sample->root_freq;
                         }
+
                          // Linear interpolation.
                         uint32_t high = v->sample_pos / 0x100000000LL;
                         uint64_t low = v->sample_pos % 0x100000000LL;
@@ -375,31 +389,10 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         uint64_t val = samp / 0x100000000LL * v->volume / 0x10000;
                         chunk[i][0] += val * (64 + ch->pan) / 64;
                         chunk[i][1] += val * (64 - ch->pan) / 64;
-
-                         // Vibrato
-                        if (!--v->pitch_timer) {
-                            v->pitch_timer = PITCH_UPDATE_INTERVAL;
-                            v->vibrato_sweep_position += sample->vibrato_sweep_increment * PITCH_UPDATE_INTERVAL;
-                            if (v->vibrato_sweep_position > 0x1000000)
-                                v->vibrato_sweep_position = 0x1000000;
-                            v->vibrato_phase += sample->vibrato_phase_increment * PITCH_UPDATE_INTERVAL;
-                            if (v->vibrato_phase >= 0x1000000)
-                                v->vibrato_phase -= 0x1000000;
-                            uint32_t vibrato = sample->vibrato_depth
-                                             * v->vibrato_sweep_position / (0x1000000 / 0x80)
-                                             * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
-
-                             // Notes are on a logarithmic scale, so we add instead of multiplying
-                            uint32_t note = v->note * 0x10000
-                                          + ch->pitch_bend * 0x10
-                                          + vibrato * 4;  // Range over a whole step
-                            v->sample_inc = sample->sample_inc
-                                          * get_freq(note) / sample->root_freq;
-                        }
                          // Move sample position forward (or backward)
                         if (v->backwards) {
                             v->sample_pos -= v->sample_inc;
-                            if (v->sample_pos <= sample->loop_start * 0x100000000LL) {
+                            if (v->sample_pos < sample->loop_start * 0x100000000LL) {
                                 if (sample->loop && !no_loop) {
                                      // pingpong assumed
                                     v->backwards = 0;
