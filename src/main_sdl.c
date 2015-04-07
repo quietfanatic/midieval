@@ -18,7 +18,7 @@ int main (int argc, char** argv) {
 
      // Set up SDL audio
     SDL_AudioSpec spec;
-    spec.freq = 48000;
+    spec.freq = MDV_SAMPLE_RATE;
     spec.format = AUDIO_S16;
     spec.channels = 2;
     spec.samples = 4096;
@@ -29,7 +29,6 @@ int main (int argc, char** argv) {
         printf("SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
     }
 
-     // Play until input
     SDL_PauseAudioDevice(dev, 0);
     fgetc(stdin);
     SDL_PauseAudioDevice(dev, 1);

@@ -8,6 +8,7 @@
 
 typedef struct MDV_Sequence MDV_Sequence;
 typedef struct MDV_Player MDV_Player;
+typedef struct MDV_Event MDV_Event;
 
 ///// Main player API /////
 
@@ -17,6 +18,8 @@ MDV_Player* mdv_new_player ();
 void mdv_load_config (MDV_Player*, const char* filename);
  // Set the sequence currently being played (use load_midi)
 void mdv_play_sequence (MDV_Player*, MDV_Sequence*);
+ // Just do a single event.
+void mdv_play_event (MDV_Player*, MDV_Event*);
  // Get this many bytes of audio.  len must be a multiple of 4
 void mdv_get_audio (MDV_Player*, uint8_t* buf, int len);
  // 0 if either no sequence was given or the sequence is done

@@ -86,6 +86,7 @@ MDV_Player* mdv_new_player () {
     MDV_Player* player = (MDV_Player*)malloc(sizeof(MDV_Player));
     mdv_reset_player(player);
     mdv_bank_init(&player->bank);
+    printf("%lu\n", sizeof(MDV_Player));
     return player;
 }
 void mdv_free_player (MDV_Player* player) {
@@ -118,7 +119,7 @@ void mdv_load_drum (MDV_Player* player, uint8_t index, const char* filename) {
     mdv_bank_load_drum(&player->bank, index, filename);
 }
 
-static void do_event (MDV_Player* player, MDV_Event* event) {
+void mdv_play_event (MDV_Player* player, MDV_Event* event) {
     switch (event->type) {
         case MDV_NOTE_OFF: {
             do_note_off:
@@ -229,7 +230,7 @@ void mdv_fast_forward_to_note (MDV_Player* player) {
     player->samples_to_tick = 1;
     player->ticks_to_event = 0;
     while (!player->done && player->current->event.type != MDV_NOTE_ON) {
-        do_event(player, &player->current->event);
+        mdv_play_event(player, &player->current->event);
         player->current += 1;
         if (player->current >= player->seq->events + player->seq->n_events) {
             player->done = 1;
@@ -255,7 +256,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
      // Advance event timeline.
         if (!player->samples_to_tick) {
             while (!player->done && !player->ticks_to_event) {
-                do_event(player, &player->current->event);
+                mdv_play_event(player, &player->current->event);
                 uint32_t old_time = player->current->time;
                 player->current += 1;
                 if (player->current >= seq->events + seq->n_events) {
