@@ -210,9 +210,6 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                         double high = log(v->samples[1].sample->root_freq);
                         v->sample_mix = (mid - low) / (high - low)
                                       * 0x100000000LL;
-                        printf("%g %g %g %g\n",
-                            low, mid, high, v->sample_mix * 1.0 / 0x100000000LL
-                        );
                     }
                 }
                 else {
