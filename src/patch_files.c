@@ -229,7 +229,7 @@ void mdv_print_patch (MDV_Patch* pat) {
         printf("    pan: %hhu\n", pat->samples[i].pan);
         printf("    loop: %hhu\n", pat->samples[i].loop);
         printf("    pingpong: %hhu\n", pat->samples[i].pingpong);
-        printf("    sample_inc: %hu\n", pat->samples[i].sample_inc);
+        printf("    sample_inc: %llu\n", (long long unsigned)pat->samples[i].sample_inc);
         printf("    data_size: %u\n", pat->samples[i].data_size);
         printf("    A bit of data: %04hx %04hx %04hx %04hx %04hx %04hx %04hx %04hx\n",
             pat->samples[i].data[0], pat->samples[i].data[1],
