@@ -50,12 +50,12 @@ struct MDV_Player {
     MDV_Sequence* seq;
     MDV_Bank bank;
      // State
-    MDV_Timed_Event* current;
+    uint32_t seq_pos;
     uint32_t samples_to_tick;
     uint32_t ticks_to_event;
-    int done;
     Channel channels [16];
     uint8_t inactive;  // inactive voices
+    uint8_t n_active_voices;
     Voice voices [255];
      // Debug
     uint64_t clip_count;
@@ -70,6 +70,7 @@ void mdv_reset_player (MDV_Player* p) {
         p->channels[i].voices = 255;
     }
     p->inactive = 0;
+    p->n_active_voices = 0;
     for (uint32_t i = 0; i < 255; i++) {
         p->voices[i].next = i + 1;
     }
@@ -84,7 +85,6 @@ MDV_Player* mdv_new_player () {
     MDV_Player* player = (MDV_Player*)malloc(sizeof(MDV_Player));
     mdv_reset_player(player);
     mdv_bank_init(&player->bank);
-    printf("%lu\n", sizeof(MDV_Player));
     return player;
 }
 void mdv_free_player (MDV_Player* player) {
@@ -97,14 +97,15 @@ void mdv_play_sequence (MDV_Player* player, MDV_Sequence* seq) {
      // Default tempo is 120bpm
     player->tick_length = MDV_SAMPLE_RATE / seq->tpb / 2;
     player->seq = seq;
-    player->current = seq->events;
+    player->seq_pos = 0;
     player->samples_to_tick = player->tick_length;
     player->ticks_to_event = seq->events[0].time;
-    player->done = 0;
 }
 
 int mdv_currently_playing (MDV_Player* player) {
-    return player->seq && !player->done;
+    return player->seq
+        && (player->seq_pos < player->seq->n_events
+         || player->n_active_voices > 0);
 }
 
 void mdv_load_config (MDV_Player* player, const char* filename) {
@@ -138,6 +139,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
             if (event->param2 == 0)
                 goto do_note_off;
             if (player->inactive != 255) {
+                player->n_active_voices += 1;
                 Voice* v = &player->voices[player->inactive];
                 Channel* ch = &player->channels[event->channel];
                 player->inactive = v->next;
@@ -198,6 +200,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 *np = v->next;
                 v->next = player->inactive;
                 player->inactive = v - player->voices;
+                player->n_active_voices -= 1;
             }
             ch->program = event->param1;
             break;
@@ -223,25 +226,24 @@ typedef struct Samp {
 } Samp;
 
 void mdv_fast_forward_to_note (MDV_Player* player) {
-    if (!player->seq) return;
-    player->samples_to_tick = 1;
-    player->ticks_to_event = 0;
-    while (!player->done && player->current->event.type != MDV_NOTE_ON) {
-        mdv_play_event(player, &player->current->event);
-        player->current += 1;
-        if (player->current >= player->seq->events + player->seq->n_events) {
-            player->done = 1;
-        }
+    MDV_Sequence* seq = player->seq;
+    if (!seq) return;
+    while (player->seq_pos < seq->n_events
+        && seq->events[player->seq_pos].event.type != MDV_NOTE_ON
+    ) {
+        mdv_play_event(player, &seq->events[player->seq_pos].event);
+        player->seq_pos += 1;
     }
+    player->samples_to_tick = 0;
+    player->ticks_to_event = 0;
 }
 
 #define MAX_CHUNK_LENGTH 512
 
 void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
-    MDV_Sequence* seq = player->seq;
     int16_t(* buf )[2] = (int16_t(*)[2])buf_;
     len /= 4;  // Assuming always a whole number of samples
-    if (!seq || player->done) {
+    if (!mdv_currently_playing(player)) {
         for (int i = 0; i < len; i++) {
             buf[i][0] = 0;
             buf[i][1] = 0;
@@ -252,19 +254,17 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
     while (buf_pos < len) {
      // Advance event timeline.
         if (!player->samples_to_tick) {
-            while (!player->done && !player->ticks_to_event) {
-                mdv_play_event(player, &player->current->event);
-                uint32_t old_time = player->current->time;
-                player->current += 1;
-                if (player->current >= seq->events + seq->n_events) {
-                    player->done = 1;
-                }
-                else {
-                    player->ticks_to_event = player->current->time - old_time;
+            MDV_Sequence* seq = player->seq;
+            while (player->seq_pos < seq->n_events && !player->ticks_to_event) {
+                MDV_Timed_Event* te = &seq->events[player->seq_pos];
+                mdv_play_event(player, &te->event);
+                player->seq_pos += 1;
+                if (player->seq_pos < seq->n_events) {
+                    player->ticks_to_event = seq->events[player->seq_pos].time - te->time;
                 }
             }
-            if (!player->done)
-                --player->ticks_to_event;
+            if (player->ticks_to_event)
+                player->ticks_to_event -= 1;
             player->samples_to_tick = player->tick_length;
         }
         int chunk_length = player->samples_to_tick < len - buf_pos
@@ -291,6 +291,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                     *ip = v->next;
                     v->next = player->inactive;
                     player->inactive = v - player->voices;
+                    player->n_active_voices -= 1;
                     continue;
                 }
                 skip_delete_voice: { }
