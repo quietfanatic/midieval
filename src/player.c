@@ -45,6 +45,7 @@ typedef struct Channel {
     uint8_t no_envelope;  // Usually true for drum patches
     uint8_t no_loop;  // ''
     uint8_t is_drums;
+    uint8_t bank;
     MDV_Patch* patch;  // Because bank changing doesn't affect this
 } Channel;
 
@@ -212,7 +213,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 v->vibrato_phase = 0;
                  // Decide which patch sample we're using
                 MDV_Patch* patch = ch->is_drums
-                    ? player->drumsets[0][v->note]
+                    ? ch->bank < player->n_drumsets ? player->drumsets[ch->bank][v->note] : NULL
                     : ch->patch;
                 if (patch) {
                     v->patch_volume = patch->volume;
@@ -237,6 +238,9 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
         }
         case MDV_CONTROLLER: {
             switch (event->param1) {
+                case MDV_BANK_SELECT:
+                    ch->bank = event->param2;
+                    break;
                 case MDV_DATA_ENTRY_MSB:
                     if (ch->rpn == 0x0000)
                         ch->pitch_bend_sensitivity =
@@ -276,7 +280,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                     ch->volume = 127;
                     ch->expression = 127;
                     ch->pan = 0;
-                    ch->voices = 255;
+                    ch->bank = 0;
                     break;
                 case MDV_ALL_NOTES_OFF:
                     for (uint8_t i = ch->voices; i != 255; i = player->voices[i].next) {
@@ -290,7 +294,9 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
             break;
         }
         case MDV_PROGRAM_CHANGE: {
-            ch->patch = player->banks[0][event->param1];
+            ch->patch = ch->bank < player->n_banks
+                ? player->banks[ch->bank][event->param1]
+                : NULL;
             break;
         }
         case MDV_PITCH_BEND: {

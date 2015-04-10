@@ -86,7 +86,7 @@ enum MDV_Common_Event_Type {
 typedef uint8_t MDV_Common_Event_Type;
 
 enum MDV_Controller {
-    MDV_BANK_SELECT = 0, MDV_BANK_SELECT_MSB = 0,  // U
+    MDV_BANK_SELECT = 0, MDV_BANK_SELECT_MSB = 0,
     MDV_DATA_ENTRY = 6, MDV_DATA_ENTRY_MSB = 6,
     MDV_VOLUME = 7, MDV_VOLUME_MSB = 7,
     MDV_BALANCE = 8, MDV_BALANCE_MSV = 8,  // U
