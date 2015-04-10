@@ -70,7 +70,7 @@ static void require (FILE* f, uint32_t size, const char* str) {
     }
 }
 
-MDV_Patch* _mdv_load_patch (const char* filename) {
+MDV_Patch* mdv_patch_load (const char* filename) {
     FILE* f = fopen(filename, "r");
     if (!f) {
         printf("Couldn't open %s for reading: %s\n", filename, strerror(errno));
@@ -191,11 +191,12 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
 
   fail:
     fclose(f);
-    mdv_free_patch(pat);
+    mdv_patch_free(pat);
     exit(1);
 }
 
-void mdv_free_patch (MDV_Patch* pat) {
+void mdv_patch_free (MDV_Patch* pat) {
+    if (!pat) return;
     if (pat->samples) {
         for (uint32_t i = 0; i < pat->n_samples; i++) {
             if (pat->samples[i].data)
@@ -206,7 +207,7 @@ void mdv_free_patch (MDV_Patch* pat) {
     free(pat);
 }
 
-void mdv_print_patch (MDV_Patch* pat) {
+void mdv_patch_print (MDV_Patch* pat) {
     printf("Patch: {\n");
     printf("  volume: %hu\n", pat->volume);
     for (uint8_t i = 0; i < pat->n_samples; i++) {
@@ -240,35 +241,6 @@ void mdv_print_patch (MDV_Patch* pat) {
         printf("  }\n");
     }
     printf("}\n");
-}
-
-void mdv_bank_init (MDV_Bank* bank) {
-    for (uint8_t i = 0; i < 128; i++) {
-        bank->patches[i] = NULL;
-        bank->drums[i] = NULL;
-    }
-}
-void mdv_bank_load_patch (MDV_Bank* bank, uint8_t instrument, const char* filename) {
-    if (instrument < 128) {
-        bank->patches[instrument] = _mdv_load_patch(filename);
-    }
-}
-void mdv_bank_load_drum (MDV_Bank* bank, uint8_t instrument, const char* filename) {
-    if (instrument < 128) {
-        bank->drums[instrument] = _mdv_load_patch(filename);
-    }
-}
-void mdv_bank_free_patches (MDV_Bank* bank) {
-    for (uint8_t i = 0; i < 128; i++) {
-        if (bank->patches[i]) {
-            mdv_free_patch(bank->patches[i]);
-            bank->patches[i] = NULL;
-        }
-        if (bank->drums[i]) {
-            mdv_free_patch(bank->drums[i]);
-            bank->drums[i] = NULL;
-        }
-    }
 }
 
 static char* read_word (char** p, char* end) {
@@ -328,7 +300,7 @@ static void line_break (char** p, char* end) {
     line_begin = *p;
 }
 
-void mdv_bank_load_config (MDV_Bank* bank, const char* cfg) {
+void mdv_load_config (MDV_Player* player, const char* cfg) {
     int32_t prefix = -1;
     for (int32_t i = 0; cfg[i]; i++) {
         if (cfg[i] == '/') prefix = i + 1;
@@ -392,19 +364,7 @@ void mdv_bank_load_config (MDV_Bank* bank, const char* cfg) {
                 memcpy(filename, cfg, prefix);
                 memcpy(filename + prefix, word, p - word);
                 memcpy(filename + prefix + (p - word), ".pat", 5);
-                MDV_Patch* patch = _mdv_load_patch(filename);
-                if (drumset) {
-                    if (bank->drums[program]) {
-                        mdv_free_patch(bank->drums[program]);
-                    }
-                    bank->drums[program] = patch;
-                }
-                else {
-                    if (bank->patches[program]) {
-                        mdv_free_patch(bank->patches[program]);
-                    }
-                    bank->patches[program] = patch;
-                }
+                MDV_Patch* patch = mdv_patch_load(filename);
                 free(filename);
                 skip_ws(&p, end);
                 while (p != end && *p != '\n') {
@@ -437,6 +397,10 @@ void mdv_bank_load_config (MDV_Bank* bank, const char* cfg) {
                     }
                     skip_ws(&p, end);
                 }
+                if (drumset)
+                    mdv_set_drum(player, 0, program, patch);
+                else
+                    mdv_set_patch(player, 0, program, patch);
             }
             else {
                 skip_ws(&p, end);

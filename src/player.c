@@ -51,9 +51,10 @@ typedef struct Channel {
 
 struct MDV_Player {
      // Specification
+    MDV_Patch* patches [128];
+    MDV_Patch* drums [128];
     uint32_t tick_length;
     MDV_Sequence* seq;
-    MDV_Bank bank;
      // State
     uint32_t seq_pos;
     uint32_t samples_to_tick;
@@ -83,14 +84,20 @@ MDV_Player* mdv_new_player () {
     init_tables();
     debug_f = fopen("debug_out", "w");
     MDV_Player* player = (MDV_Player*)malloc(sizeof(MDV_Player));
-    mdv_bank_init(&player->bank);
+    for (uint8_t i = 0; i < 128; i++) {
+        player->patches[i] = NULL;
+        player->drums[i] = NULL;
+    }
     player->clip_count = 0;
     MDV_Event reset = {MDV_COMMON, MDV_RESET, 0, 0};
     mdv_play_event(player, &reset);
     return player;
 }
 void mdv_free_player (MDV_Player* player) {
-    mdv_bank_free_patches(&player->bank);
+    for (uint8_t i = 0; i < 128; i++) {
+        mdv_patch_free(player->patches[i]);
+        mdv_patch_free(player->drums[i]);
+    }
     fprintf(stderr, "Clip count: %llu\n", (long long unsigned)player->clip_count);
     free(player);
 }
@@ -110,14 +117,27 @@ int mdv_currently_playing (MDV_Player* player) {
          || player->n_active_voices > 0);
 }
 
-void mdv_load_config (MDV_Player* player, const char* filename) {
-    mdv_bank_load_config(&player->bank, filename);
+void mdv_set_patch (MDV_Player* player, uint8_t bank, uint8_t program, MDV_Patch* patch) {
+    if (bank != 0) return;
+     // TODO: only turn off what we need to
+    for (uint8_t i = 0; i < 16; i++) {
+        MDV_Event e = {MDV_CONTROLLER, i, MDV_ALL_SOUND_OFF, 0};
+        mdv_play_event(player, &e);
+    }
+    if (player->patches[program])
+        mdv_patch_free(player->patches[program]);
+    player->patches[program] = patch;
 }
-void mdv_load_patch (MDV_Player* player, uint8_t index, const char* filename) {
-    mdv_bank_load_patch(&player->bank, index, filename);
-}
-void mdv_load_drum (MDV_Player* player, uint8_t index, const char* filename) {
-    mdv_bank_load_drum(&player->bank, index, filename);
+void mdv_set_drum (MDV_Player* player, uint8_t bank, uint8_t program, MDV_Patch* patch) {
+    if (bank != 0) return;
+     // TODO: only turn off what we need to
+    for (uint8_t i = 0; i < 16; i++) {
+        MDV_Event e = {MDV_CONTROLLER, i, MDV_ALL_SOUND_OFF, 0};
+        mdv_play_event(player, &e);
+    }
+    if (player->drums[program])
+        mdv_patch_free(player->drums[program]);
+    player->drums[program] = patch;
 }
 
 void mdv_play_event (MDV_Player* player, MDV_Event* event) {
@@ -161,8 +181,8 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 v->vibrato_phase = 0;
                  // Decide which patch sample we're using
                 MDV_Patch* patch = ch->is_drums
-                    ? player->bank.drums[v->note]
-                    : player->bank.patches[ch->program];
+                    ? player->drums[v->note]
+                    : player->patches[ch->program];
                 if (patch) {
                     v->patch_volume = patch->volume;
                     v->do_envelope = !ch->is_drums || patch->keep_envelope;

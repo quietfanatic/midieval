@@ -9,6 +9,8 @@
 typedef struct MDV_Sequence MDV_Sequence;
 typedef struct MDV_Player MDV_Player;
 typedef struct MDV_Event MDV_Event;
+typedef struct MDV_Patch MDV_Patch;
+typedef struct MDV_Sample MDV_Sample;
 
 ///// Main player API /////
 
@@ -36,6 +38,7 @@ void mdv_free_player (MDV_Player*);
 void mdv_channel_set_drums (MDV_Player*, uint8_t channel, int is_drums);
 int mdv_channel_is_drums (MDV_Player*, uint8_t channel);
 void mdv_fast_forward_to_note (MDV_Player*);
+
 
 ///// Main sequences API /////
 
@@ -183,29 +186,10 @@ typedef struct MDV_Patch {
     MDV_Sample* samples;
 } MDV_Patch;
 
-MDV_Patch* _mdv_load_patch (const char* filename);
-void mdv_free_patch (MDV_Patch*);
-
-void mdv_print_patch (MDV_Patch*);
-
-typedef struct MDV_Bank {
-    MDV_Patch* patches [128];
-    MDV_Patch* drums [128];
-} MDV_Bank;
-
-void mdv_bank_init (MDV_Bank*);
-void mdv_bank_load_config (MDV_Bank*, const char* filename);
-void mdv_bank_load_patch (MDV_Bank*, uint8_t instrument, const char* filename);
-void mdv_bank_load_drum (MDV_Bank*, uint8_t instrument, const char* filename);
-void mdv_bank_free_patches (MDV_Bank*);
-
-
-///// Auxilary player API /////
-
- // Reset player to initial state
-void mdv_reset_player (MDV_Player*);
- // Load an individual patch from a file
-void mdv_load_patch (MDV_Player*, uint8_t index, const char* filename);
-void mdv_load_drum (MDV_Player*, uint8_t drum, const char* filename);
+MDV_Patch* mdv_patch_load (const char* filename);
+void mdv_patch_free (MDV_Patch*);
+void mdv_patch_print (MDV_Patch*);
+void mdv_set_patch (MDV_Player*, uint8_t bank, uint8_t program, MDV_Patch*);
+void mdv_set_drum (MDV_Player*, uint8_t bank, uint8_t program, MDV_Patch*);
 
 #endif
