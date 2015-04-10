@@ -65,6 +65,7 @@ struct MDV_Player {
     Voice voices [255];
      // Debug
     uint64_t clip_count;
+    int32_t max_value;
 };
 
 void mdv_channel_set_drums (MDV_Player* p, uint8_t channel, int is_drums) {
@@ -89,6 +90,7 @@ MDV_Player* mdv_new_player () {
         player->drums[i] = NULL;
     }
     player->clip_count = 0;
+    player->max_value = 0;
     MDV_Event reset = {MDV_COMMON, MDV_RESET, 0, 0};
     mdv_play_event(player, &reset);
     return player;
@@ -99,6 +101,7 @@ void mdv_free_player (MDV_Player* player) {
         mdv_patch_free(player->drums[i]);
     }
     fprintf(stderr, "Clip count: %llu\n", (long long unsigned)player->clip_count);
+    fprintf(stderr, "Max value: %08lx\n", (long unsigned)player->max_value);
     free(player);
 }
 
@@ -531,6 +534,14 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                 player->clip_count += 1;
             if (buf[buf_pos][1] == 32767 || buf[buf_pos][1] == -32768)
                 player->clip_count += 1;
+            if (chunk[i][0] > player->max_value)
+                player->max_value = chunk[i][0];
+            else if (-chunk[i][0] > player->max_value)
+                player->max_value = -chunk[i][0];
+            if (chunk[i][1] > player->max_value)
+                player->max_value = chunk[i][1];
+            else if (-chunk[i][1] > player->max_value)
+                player->max_value = -chunk[i][1];
             buf_pos += 1;
         }
     }
