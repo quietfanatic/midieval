@@ -41,37 +41,77 @@ void mdv_print_sequence (MDV_Sequence*);
 
 
 ///// Events API /////
+// U = unimplemented
+// I = ignored
 
 enum MDV_Event_Type {
     MDV_NOTE_OFF = 0x08,
     MDV_NOTE_ON = 0x09,
-    MDV_NOTE_AFTERTOUCH = 0x0A,
+    MDV_NOTE_AFTERTOUCH = 0x0A,  // U, should this change velocity?
     MDV_CONTROLLER = 0x0B,
     MDV_PROGRAM_CHANGE = 0x0C,
-    MDV_CHANNEL_AFTERTOUCH = 0x0D,
+    MDV_CHANNEL_PRESSURE = 0x0D,  // U
     MDV_PITCH_BEND = 0x0E,
-    MDV_META = 0x0F,
+    MDV_COMMON = 0x0F,
+     // Special custom event type, can't be sent over a real MIDI stream
     MDV_SET_TEMPO = 0x10
 };
 typedef uint8_t MDV_Event_Type;
+
+enum MDV_Common_Event_Type {
+    MDV_SYSEX = 0x0,  // U
+    MDV_SONG_POSITION = 0x2,  // U
+    MDV_SONG_SELECT = 0x3,  // U
+    MDV_SYSEX_END = 0x7,  // U
+    MDV_MIDI_CLOCK = 0x8,  // U
+    MDV_MIDI_START = 0xA,  // U
+    MDV_MIDI_CONTINUE = 0xB,  // U
+    MDV_MIDI_STOP = 0xC,  // U
+    MDV_RESET = 0xF,  // U
+};
+typedef uint8_t MDV_Common_Event_Type;
+
 enum MDV_Controller {
-    MDV_BANK_SELECT = 1,
-    MDV_MODULATION = 2,
-    MDV_DATA_ENTRY_MSB = 6,
-    MDV_VOLUME = 7,
-    MDV_BALANCE = 8,
-    MDV_PAN = 10,
-    MDV_EXPRESSION = 11,
-    MDV_DATA_ENTRY_LSB = 38,
-    MDV_NRPN_LSB = 98,
-    MDV_NRPN_MSB = 99,
-    MDV_RPN_LSB = 100,
-    MDV_RPN_MSB = 101
+    MDV_BANK_SELECT = 0, MDV_BANK_SELECT_MSB = 0,  // U
+    MDV_DATA_ENTRY = 6, MDV_DATA_ENTRY_MSB = 6,  // U
+    MDV_VOLUME = 7, MDV_VOLUME_MSB = 7,
+    MDV_BALANCE = 8, MDV_BALANCE_MSV = 8,  // U
+    MDV_PAN = 10, MDV_PAN_MSB = 10,
+    MDV_EXPRESSION = 11, MDV_EXPRESSION_MSB = 11,
+    MDV_BANK_SELECT_LSB = 32,  // I
+    MDV_DATA_ENTRY_LSB = 38,  // U
+    MDV_VOLUME_LSB = 39,  // I
+    MDV_BALANCE_LSB = 40,  // I
+    MDV_PAN_LSB = 42,  // I
+    MDV_EXPRESSION_LSB = 43,  // I
+    MDV_HOLD = 64,  // U
+    MDV_SUSTENUTO = 66,  // U
+    MDV_SOFT = 67,  // U
+    MDV_LEGATO = 68,  // U
+    MDV_HOLD_2 = 69,  // U
+    MDV_RELEASE_TIME = 72,  // U
+    MDV_ATTACK_TIME = 73,  // U
+    MDV_REVERB = 91,  // U
+    MDV_CHORUS = 93,  // U
+    MDV_NRPN_LSB = 98,  // U
+    MDV_NRPN_MSB = 99,  // U
+    MDV_RPN_LSB = 100,  // U
+    MDV_RPN_MSB = 101,  // U
+    MDV_ALL_SOUND_OFF = 120,  // U
+    MDV_ALL_CONTROLLERS_OFF = 121,  // U
+    MDV_ALL_NOTES_OFF = 123,  // U
 };
 typedef uint8_t MDV_Controller;
 
+enum MDV_RPN {
+    MDV_PITCH_BEND_RANGE = 0x0000,  // U
+    MDV_RPN_RESET = 0x3FFFF  // U
+};
+typedef uint16_t MDV_RPN;
+
+
 static inline int mdv_parameters_used (uint8_t t) {
-    if (t == MDV_PROGRAM_CHANGE || t == MDV_CHANNEL_AFTERTOUCH)
+    if (t == MDV_PROGRAM_CHANGE || t == MDV_CHANNEL_PRESSURE)
         return 1;
     else
         return 2;
