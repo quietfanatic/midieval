@@ -30,7 +30,35 @@ int main (int argc, char** argv) {
     }
 
     SDL_PauseAudioDevice(dev, 0);
-    fgetc(stdin);
+     // Interpret manually entered events in hex, for testing
+    char buf [512];
+    while (fgets(buf, 512, stdin)) {
+        if (buf[0] == '\n')
+            goto end;
+        int len = 0;
+        sscanf(buf, "%*[0123456789abcdefABCDEF]%n", &len);
+        if (buf[len] != '\n')
+            goto end;
+        len = 0;
+        for (char* t = buf; t[0] != '\n' && t[1] != '\n'; t += 2) {
+            sscanf(t, "%2hhx", &buf[len]);
+            len += 1;
+        }
+         // Super dumb event parsing.  TODO of course
+        if (len == 0)
+            goto end;
+        printf("%02hhX %02hhX %02hhX\n", buf[0], buf[1], buf[2]);
+        MDV_Event event;
+        event.type = (uint8_t)buf[0] >> 4;
+        event.channel = (uint8_t)buf[0] & 0x7;
+        event.param1 = len >= 2 ? buf[1] : 0;
+        event.param2 = len >= 3 ? buf[2] : 0;
+        mdv_print_event(&event);
+        SDL_LockAudioDevice(dev);
+        mdv_play_event(player, &event);
+        SDL_UnlockAudioDevice(dev);
+    }
+    end: { }
     SDL_PauseAudioDevice(dev, 1);
 
      // Clean up

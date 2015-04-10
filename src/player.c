@@ -193,6 +193,24 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 case MDV_PAN:
                     ch->pan = event->param2 - 64;
                     break;
+                case MDV_ALL_SOUND_OFF:
+                    for (uint8_t i = ch->voices; i != 255; i = player->voices[i].next)
+                        player->n_active_voices -= 1;
+                    ch->voices = 255;
+                    break;
+                case MDV_ALL_CONTROLLERS_OFF:
+                    ch->volume = 127;
+                    ch->expression = 127;
+                    ch->pitch_bend = 0;
+                    ch->pan = 0;
+                    ch->voices = 255;
+                    break;
+                case MDV_ALL_NOTES_OFF:
+                    for (uint8_t i = ch->voices; i != 255; i = player->voices[i].next) {
+                        if (player->voices[i].envelope_phase < 3)
+                            player->voices[i].envelope_phase = 3;
+                    }
+                    break;
                 default:
                     break;
             }
