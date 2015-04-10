@@ -44,6 +44,7 @@ typedef struct Channel {
      // Usually true for drum patches
     uint8_t no_envelope;
     uint8_t no_loop;
+    uint8_t is_drums;
 } Channel;
 
 struct MDV_Player {
@@ -70,13 +71,25 @@ void mdv_reset_player (MDV_Player* p) {
         p->channels[i].pitch_bend = 0;
         p->channels[i].pan = 0;
         p->channels[i].voices = 255;
+        p->channels[i].is_drums = 0;
     }
+    p->channels[9].is_drums = 1;
     p->inactive = 0;
     p->n_active_voices = 0;
     for (uint32_t i = 0; i < 255; i++) {
         p->voices[i].next = i + 1;
     }
     p->clip_count = 0;
+}
+void mdv_channel_set_drums (MDV_Player* p, uint8_t channel, int is_drums) {
+    if (channel < 16)
+        p->channels[channel].is_drums = is_drums;
+}
+int mdv_channel_is_drums (MDV_Player* p, uint8_t channel) {
+    if (channel < 16)
+        return p->channels[channel].is_drums;
+    else
+        return 0;
 }
 
 FILE* debug_f;
@@ -121,11 +134,13 @@ void mdv_load_drum (MDV_Player* player, uint8_t index, const char* filename) {
 }
 
 void mdv_play_event (MDV_Player* player, MDV_Event* event) {
+    if (event->channel > 16) return;
+    Channel* ch = &player->channels[event->channel];
     switch (event->type) {
         case MDV_NOTE_OFF: {
             do_note_off:
-            if (event->channel != 9) {
-                for (uint8_t i = player->channels[event->channel].voices; i != 255; i = player->voices[i].next) {
+            if (!ch->is_drums) {
+                for (uint8_t i = ch->voices; i != 255; i = player->voices[i].next) {
                     Voice* v = &player->voices[i];
                     if (v->note == event->param1) {
                         if (v->envelope_phase < 3) {
@@ -143,7 +158,6 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
             if (player->inactive != 255) {
                 player->n_active_voices += 1;
                 Voice* v = &player->voices[player->inactive];
-                Channel* ch = &player->channels[event->channel];
                 player->inactive = v->next;
                 v->next = ch->voices;
                 ch->voices = v - player->voices;
@@ -159,15 +173,13 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 v->vibrato_sweep = 0;
                 v->vibrato_phase = 0;
                  // Decide which patch sample we're using
-                MDV_Patch* patch = event->channel == 9
+                MDV_Patch* patch = ch->is_drums
                     ? player->bank.drums[v->note]
                     : player->bank.patches[ch->program];
                 if (patch) {
                     v->patch_volume = patch->volume;
-                    v->do_envelope = ch != player->channels + 9
-                                  || patch->keep_envelope;
-                    v->do_loop = ch != player->channels + 9
-                              || patch->keep_loop;
+                    v->do_envelope = !ch->is_drums || patch->keep_envelope;
+                    v->do_loop = !ch->is_drums || patch->keep_loop;
                     if (patch->note >= 0)
                         v->note = patch->note;
                     uint32_t freq = get_freq(v->note * 0x10000);
@@ -188,13 +200,13 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
         case MDV_CONTROLLER: {
             switch (event->param1) {
                 case MDV_VOLUME:
-                    player->channels[event->channel].volume = event->param2;
+                    ch->volume = event->param2;
                     break;
                 case MDV_EXPRESSION:
-                    player->channels[event->channel].expression = event->param2;
+                    ch->expression = event->param2;
                     break;
                 case MDV_PAN:
-                    player->channels[event->channel].pan = event->param2 - 64;
+                    ch->pan = event->param2 - 64;
                     break;
                 default:
                     break;
@@ -203,7 +215,6 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
         }
         case MDV_PROGRAM_CHANGE: {
              // Silence all voices in this channel.
-            Channel* ch = &player->channels[event->channel];
             uint8_t* np = &ch->voices;
             while (*np != 255) {
                 Voice* v = &player->voices[*np];
@@ -216,7 +227,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
             break;
         }
         case MDV_PITCH_BEND: {
-            player->channels[event->channel].pitch_bend =
+            ch->pitch_bend =
                 (event->param2 << 7 | event->param1) - 8192;
             break;
         }

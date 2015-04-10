@@ -27,6 +27,8 @@ int mdv_currently_playing (MDV_Player*);
  // Delete a player
 void mdv_free_player (MDV_Player*);
 
+void mdv_channel_set_drums (MDV_Player*, uint8_t channel, int is_drums);
+int mdv_channel_is_drums (MDV_Player*, uint8_t channel);
 void mdv_fast_forward_to_note (MDV_Player*);
 
 ///// Main sequences API /////
