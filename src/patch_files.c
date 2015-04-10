@@ -152,17 +152,17 @@ MDV_Patch* _mdv_load_patch (const char* filename) {
          // These 38s are an arbitrary scaling factor copied from Timidity
          // Increasing them makes tremolo and vibrato go slower
         uint32_t trs = read_u8(f);
-        pat->samples[i].tremolo_sweep_increment = !trs ? 0 :
+        pat->samples[i].tremolo_sweep_inc = !trs ? 0 :
             (38 * 0x1000000) / (MDV_SAMPLE_RATE * trs);
         uint32_t trp = read_u8(f);
-        pat->samples[i].tremolo_phase_increment =
+        pat->samples[i].tremolo_phase_inc =
             (trp * 0x1000000) / (38 * MDV_SAMPLE_RATE);
         pat->samples[i].tremolo_depth = read_u8(f);
         uint32_t vbs = read_u8(f);
-        pat->samples[i].vibrato_sweep_increment = !vbs ? 0 :
+        pat->samples[i].vibrato_sweep_inc = !vbs ? 0 :
             (38 * 0x1000000) / (MDV_SAMPLE_RATE * vbs);
         uint32_t vbr = read_u8(f);
-        pat->samples[i].vibrato_phase_increment =
+        pat->samples[i].vibrato_phase_inc =
             (vbr * 0x1000000) / (38 * MDV_SAMPLE_RATE);
         pat->samples[i].vibrato_depth = read_u8(f);
 

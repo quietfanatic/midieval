@@ -109,10 +109,10 @@ typedef struct MDV_Sample {
     uint32_t envelope_rates [6];
     uint32_t envelope_offsets [6];
      // 8:24 fixed point, I think
-    int32_t tremolo_sweep_increment;
-    int32_t tremolo_phase_increment;
-    int32_t vibrato_sweep_increment;
-    int32_t vibrato_phase_increment;
+    int32_t tremolo_sweep_inc;
+    int32_t tremolo_phase_inc;
+    int32_t vibrato_sweep_inc;
+    int32_t vibrato_phase_inc;
     int16_t tremolo_depth;
     int16_t vibrato_depth;
 

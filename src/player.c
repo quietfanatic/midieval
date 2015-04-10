@@ -20,9 +20,9 @@ typedef struct Voice {
      // 15:15 (?) fixed point
     uint32_t envelope_value;
      // 8:24
-    int32_t tremolo_sweep_position;
+    int32_t tremolo_sweep;
     int32_t tremolo_phase;
-    int32_t vibrato_sweep_position;
+    int32_t vibrato_sweep;
     int32_t vibrato_phase;
     uint32_t channel_volume;  // Cached so it doesn't affect ending notes
     uint32_t volume;
@@ -154,9 +154,9 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 v->sample_pos = 0;
                 v->envelope_phase = 0;
                 v->envelope_value = 0;
-                v->tremolo_sweep_position = 0;
+                v->tremolo_sweep = 0;
                 v->tremolo_phase = 0;
-                v->vibrato_sweep_position = 0;
+                v->vibrato_sweep = 0;
                 v->vibrato_phase = 0;
                  // Decide which patch sample we're using
                 MDV_Patch* patch = event->channel == 9
@@ -345,34 +345,34 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                             }
                             else { v->envelope_value = 0x3ff00000; }
                              // Tremolo
-                            v->tremolo_sweep_position += v->sample->tremolo_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                            if (v->tremolo_sweep_position > 0x1000000)
-                                v->tremolo_sweep_position = 0x1000000;
-                            v->tremolo_phase += v->sample->tremolo_phase_increment * CONTROL_UPDATE_INTERVAL;
+                            v->tremolo_sweep += v->sample->tremolo_sweep_inc * CONTROL_UPDATE_INTERVAL;
+                            if (v->tremolo_sweep > 0x1000000)
+                                v->tremolo_sweep = 0x1000000;
+                            v->tremolo_phase += v->sample->tremolo_phase_inc * CONTROL_UPDATE_INTERVAL;
                             if (v->tremolo_phase >= 0x1000000)
                                 v->tremolo_phase -= 0x1000000;
                             uint32_t tremolo = v->sample->tremolo_depth
-                                             * v->tremolo_sweep_position / (0x1000000 / 0x80)
+                                             * v->tremolo_sweep / (0x1000000 / 0x80)
                                              * sines[v->tremolo_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
                              // Volume calculation.
                             if (v->envelope_phase < 3) {
                                 v->channel_volume = (uint32_t)vols[ch->volume]
                                                   * vols[ch->expression] / 0x10000;
                             }
-                            v->volume = (uint32_t)v->patch_volume * 0x80
+                            v->volume = (uint32_t)v->patch_volume * 0x100
                                       * v->channel_volume / 0x10000
                                       * vols[v->velocity] / 0x10000
                                       * envs[v->envelope_value / 0x100000] / 0x10000
                                       * (0x10000 + tremolo) / 0x10000;
                              // Vibrato
-                            v->vibrato_sweep_position += v->sample->vibrato_sweep_increment * CONTROL_UPDATE_INTERVAL;
-                            if (v->vibrato_sweep_position > 0x1000000)
-                                v->vibrato_sweep_position = 0x1000000;
-                            v->vibrato_phase += v->sample->vibrato_phase_increment * CONTROL_UPDATE_INTERVAL;
+                            v->vibrato_sweep += v->sample->vibrato_sweep_inc * CONTROL_UPDATE_INTERVAL;
+                            if (v->vibrato_sweep > 0x1000000)
+                                v->vibrato_sweep = 0x1000000;
+                            v->vibrato_phase += v->sample->vibrato_phase_inc * CONTROL_UPDATE_INTERVAL;
                             if (v->vibrato_phase >= 0x1000000)
                                 v->vibrato_phase -= 0x1000000;
                             uint32_t vibrato = v->sample->vibrato_depth
-                                             * v->vibrato_sweep_position / (0x1000000 / 0x80)
+                                             * v->vibrato_sweep / (0x1000000 / 0x80)
                                              * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
                              // Notes are on a logarithmic scale, so we add instead of multiplying
                             uint32_t note = v->note * 0x10000
