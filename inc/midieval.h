@@ -14,16 +14,22 @@ typedef struct MDV_Event MDV_Event;
 
  // Allocate new player
 MDV_Player* mdv_new_player ();
+
  // Load a .cfg containing patch names (nothing complicated please)
 void mdv_load_config (MDV_Player*, const char* filename);
+
  // Set the sequence currently being played (use load_midi)
 void mdv_play_sequence (MDV_Player*, MDV_Sequence*);
+
  // Just do a single event.
 void mdv_play_event (MDV_Player*, MDV_Event*);
+
  // Get this many bytes of audio.  len must be a multiple of 4
 void mdv_get_audio (MDV_Player*, uint8_t* buf, int len);
+
  // 0 if either no sequence was given or the sequence is done
 int mdv_currently_playing (MDV_Player*);
+
  // Delete a player
 void mdv_free_player (MDV_Player*);
 
@@ -67,19 +73,19 @@ enum MDV_Common_Event_Type {
     MDV_MIDI_START = 0xA,  // U
     MDV_MIDI_CONTINUE = 0xB,  // U
     MDV_MIDI_STOP = 0xC,  // U
-    MDV_RESET = 0xF,  // U
+    MDV_RESET = 0xF,
 };
 typedef uint8_t MDV_Common_Event_Type;
 
 enum MDV_Controller {
     MDV_BANK_SELECT = 0, MDV_BANK_SELECT_MSB = 0,  // U
-    MDV_DATA_ENTRY = 6, MDV_DATA_ENTRY_MSB = 6,  // U
+    MDV_DATA_ENTRY = 6, MDV_DATA_ENTRY_MSB = 6,
     MDV_VOLUME = 7, MDV_VOLUME_MSB = 7,
     MDV_BALANCE = 8, MDV_BALANCE_MSV = 8,  // U
     MDV_PAN = 10, MDV_PAN_MSB = 10,
     MDV_EXPRESSION = 11, MDV_EXPRESSION_MSB = 11,
     MDV_BANK_SELECT_LSB = 32,  // I
-    MDV_DATA_ENTRY_LSB = 38,  // U
+    MDV_DATA_ENTRY_LSB = 38,
     MDV_VOLUME_LSB = 39,  // I
     MDV_BALANCE_LSB = 40,  // I
     MDV_PAN_LSB = 42,  // I
@@ -95,11 +101,11 @@ enum MDV_Controller {
     MDV_CHORUS = 93,  // U
     MDV_NRPN_LSB = 98,  // U
     MDV_NRPN_MSB = 99,  // U
-    MDV_RPN_LSB = 100,  // U
-    MDV_RPN_MSB = 101,  // U
-    MDV_ALL_SOUND_OFF = 120,  // U
-    MDV_ALL_CONTROLLERS_OFF = 121,  // U
-    MDV_ALL_NOTES_OFF = 123,  // U
+    MDV_RPN_LSB = 100,
+    MDV_RPN_MSB = 101,
+    MDV_ALL_SOUND_OFF = 120,
+    MDV_ALL_CONTROLLERS_OFF = 121,
+    MDV_ALL_NOTES_OFF = 123,
 };
 typedef uint8_t MDV_Controller;
 

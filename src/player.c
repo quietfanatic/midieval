@@ -35,11 +35,13 @@ typedef struct Voice {
 
 typedef struct Channel {
      // TODO: a lot more controllers
+    uint16_t rpn;
+    uint16_t pitch_bend_sensitivity;  // In cents, I guess
+    int32_t pitch_bend;  // 16:16 in notes
     uint8_t program;
     uint8_t volume;
     uint8_t expression;
     int8_t pan;
-    int16_t pitch_bend;
     uint8_t voices;
      // Usually true for drum patches
     uint8_t no_envelope;
@@ -184,6 +186,18 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
         }
         case MDV_CONTROLLER: {
             switch (event->param1) {
+                case MDV_DATA_ENTRY_MSB:
+                    if (ch->rpn == 0x0000)
+                        ch->pitch_bend_sensitivity =
+                            ch->pitch_bend_sensitivity % 100
+                          + event->param2 * 100;
+                    break;
+                case MDV_DATA_ENTRY_LSB:
+                    if (ch->rpn == 0x0000)
+                        ch->pitch_bend_sensitivity =
+                            ch->pitch_bend_sensitivity / 100 * 100
+                          + (event->param2 <= 100 ? event->param2 : 100);
+                    break;
                 case MDV_VOLUME:
                     ch->volume = event->param2;
                     break;
@@ -193,15 +207,23 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 case MDV_PAN:
                     ch->pan = event->param2 - 64;
                     break;
+                case MDV_RPN_LSB:
+                    ch->rpn = (ch->rpn & 0x3f80) | (event->param2 & 0x7f);
+                    break;
+                case MDV_RPN_MSB:
+                    ch->rpn = (ch->rpn & 0x007f) | ((event->param2 << 7) & 0x3f80);
+                    break;
                 case MDV_ALL_SOUND_OFF:
                     for (uint8_t i = ch->voices; i != 255; i = player->voices[i].next)
                         player->n_active_voices -= 1;
                     ch->voices = 255;
                     break;
                 case MDV_ALL_CONTROLLERS_OFF:
+                    ch->rpn = 0x3fff;
+                    ch->pitch_bend_sensitivity = 200;
+                    ch->pitch_bend = 0;
                     ch->volume = 127;
                     ch->expression = 127;
-                    ch->pitch_bend = 0;
                     ch->pan = 0;
                     ch->voices = 255;
                     break;
@@ -230,20 +252,26 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
             break;
         }
         case MDV_PITCH_BEND: {
-            ch->pitch_bend =
-                (event->param2 << 7 | event->param1) - 8192;
+             // Input ranges from -0x2000 to 0x1fff
+            int32_t pre_sensitivity =
+                (event->param2 << 7 | event->param1) - 0x2000;
+            ch->pitch_bend = pre_sensitivity * ch->pitch_bend_sensitivity
+                           * (0x10000 / 0x2000) / 100;
             break;
         }
         case MDV_COMMON: {
             switch (event->channel) {  // actually common event type, not channel
                 case MDV_RESET: {
-                    for (uint32_t i = 0; i < 16; i++) {
-                        player->channels[i].volume = 127;
-                        player->channels[i].expression = 127;
-                        player->channels[i].pitch_bend = 0;
-                        player->channels[i].pan = 0;
-                        player->channels[i].voices = 255;
-                        player->channels[i].is_drums = 0;
+                    for (Channel* ch = player->channels; ch < player->channels + 16; ch++) {
+                        ch->rpn = 0x3fff;
+                        ch->pitch_bend_sensitivity = 200;
+                        ch->pitch_bend = 0;
+                        ch->program = 0;
+                        ch->volume = 127;
+                        ch->expression = 127;
+                        ch->pan = 0;
+                        ch->voices = 255;
+                        ch->is_drums = 0;
                     }
                     player->channels[9].is_drums = 1;
                     player->inactive = 0;
@@ -413,7 +441,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                              * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
                              // Notes are on a logarithmic scale, so we add instead of multiplying
                             uint32_t note = v->note * 0x10000
-                                          + ch->pitch_bend * 0x10
+                                          + ch->pitch_bend
                                           + vibrato * 4;  // Range over a whole step
                             v->sample_inc = v->sample->sample_inc
                                           * get_freq(note) / v->sample->root_freq;
