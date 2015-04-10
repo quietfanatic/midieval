@@ -1,6 +1,11 @@
 #ifndef MIDIEVAL_H
 #define MIDIEVAL_H
 
+///// MIDIEVAL /////
+// A midi player for people who want to play midi.
+//
+// Still under heavy development.  API in a state of flux.
+
 #include <inttypes.h>
 
  // I can't guarantee values larger than this won't cause overflow somewhere

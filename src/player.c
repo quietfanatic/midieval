@@ -48,10 +48,13 @@ typedef struct Channel {
     MDV_Patch* patch;  // Because bank changing doesn't affect this
 } Channel;
 
+
 struct MDV_Player {
      // Specification
-    MDV_Patch* patches [128];
-    MDV_Patch* drums [128];
+    uint8_t n_banks;
+    uint8_t n_drumsets;
+    MDV_Patch*** banks;  // You read that right, three stars
+    MDV_Patch*** drumsets;
     uint32_t tick_length;
     MDV_Sequence* seq;
      // State
@@ -84,10 +87,10 @@ MDV_Player* mdv_new_player () {
     init_tables();
     debug_f = fopen("debug_out", "w");
     MDV_Player* player = (MDV_Player*)malloc(sizeof(MDV_Player));
-    for (uint8_t i = 0; i < 128; i++) {
-        player->patches[i] = NULL;
-        player->drums[i] = NULL;
-    }
+    player->n_banks = 0;
+    player->banks = NULL;
+    player->n_drumsets = 0;
+    player->drumsets = NULL;
     player->clip_count = 0;
     player->max_value = 0;
     MDV_Event reset = {MDV_COMMON, MDV_RESET, 0, 0};
@@ -95,10 +98,18 @@ MDV_Player* mdv_new_player () {
     return player;
 }
 void mdv_free_player (MDV_Player* player) {
-    for (uint8_t i = 0; i < 128; i++) {
-        mdv_patch_free(player->patches[i]);
-        mdv_patch_free(player->drums[i]);
+    for (uint8_t i = 0; i < player->n_banks; i++) {
+        for (uint8_t j = 0; j < 128; j++)
+            mdv_patch_free(player->banks[i][j]);
+        free(player->banks[i]);
     }
+    free(player->banks);
+    for (uint8_t i = 0; i < player->n_drumsets; i++) {
+        for (uint8_t j = 0; j < 128; j++)
+            mdv_patch_free(player->drumsets[i][j]);
+        free(player->drumsets[i]);
+    }
+    free(player->drumsets);
     fprintf(stderr, "Clip count: %llu\n", (long long unsigned)player->clip_count);
     fprintf(stderr, "Max value: %08lx\n", (long unsigned)player->max_value);
     free(player);
@@ -120,26 +131,44 @@ int mdv_currently_playing (MDV_Player* player) {
 }
 
 void mdv_set_patch (MDV_Player* player, uint8_t bank, uint8_t program, MDV_Patch* patch) {
-    if (bank != 0) return;
+    if (bank+1 > player->n_banks) {
+        player->banks = realloc(player->banks, (bank+1) * sizeof(MDV_Patch**));
+        for (uint8_t i = player->n_banks; i < bank; i++)
+            player->banks[i] = NULL;
+        player->n_banks = bank + 1;
+        player->banks[bank] = malloc(128 * sizeof(MDV_Patch*));
+        for (uint8_t i = 0; i < 128; i++) {
+            player->banks[bank][i] = NULL;
+        }
+    }
      // TODO: only turn off what we need to
     for (uint8_t i = 0; i < 16; i++) {
         MDV_Event e = {MDV_CONTROLLER, i, MDV_ALL_SOUND_OFF, 0};
         mdv_play_event(player, &e);
     }
-    if (player->patches[program])
-        mdv_patch_free(player->patches[program]);
-    player->patches[program] = patch;
+    if (player->banks[bank][program])
+        mdv_patch_free(player->banks[bank][program]);
+    player->banks[bank][program] = patch;
 }
 void mdv_set_drum (MDV_Player* player, uint8_t bank, uint8_t program, MDV_Patch* patch) {
-    if (bank != 0) return;
+    if (bank+1 > player->n_drumsets) {
+        player->drumsets = realloc(player->drumsets, (bank+1) * sizeof(MDV_Patch**));
+        for (uint8_t i = player->n_drumsets; i < bank; i++)
+            player->drumsets[i] = NULL;
+        player->n_drumsets = bank + 1;
+        player->drumsets[bank] = malloc(128 * sizeof(MDV_Patch*));
+        for (uint8_t i = 0; i < 128; i++) {
+            player->drumsets[bank][i] = NULL;
+        }
+    }
      // TODO: only turn off what we need to
     for (uint8_t i = 0; i < 16; i++) {
         MDV_Event e = {MDV_CONTROLLER, i, MDV_ALL_SOUND_OFF, 0};
         mdv_play_event(player, &e);
     }
-    if (player->drums[program])
-        mdv_patch_free(player->drums[program]);
-    player->drums[program] = patch;
+    if (player->drumsets[bank][program])
+        mdv_patch_free(player->drumsets[bank][program]);
+    player->drumsets[bank][program] = patch;
 }
 
 void mdv_play_event (MDV_Player* player, MDV_Event* event) {
@@ -183,7 +212,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 v->vibrato_phase = 0;
                  // Decide which patch sample we're using
                 MDV_Patch* patch = ch->is_drums
-                    ? player->drums[v->note]
+                    ? player->drumsets[0][v->note]
                     : ch->patch;
                 if (patch) {
                     v->patch_volume = patch->volume;
@@ -261,7 +290,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
             break;
         }
         case MDV_PROGRAM_CHANGE: {
-            ch->patch = player->patches[event->param1];
+            ch->patch = player->banks[0][event->param1];
             break;
         }
         case MDV_PITCH_BEND: {
