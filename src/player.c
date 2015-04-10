@@ -64,23 +64,6 @@ struct MDV_Player {
     uint64_t clip_count;
 };
 
-void mdv_reset_player (MDV_Player* p) {
-    for (uint32_t i = 0; i < 16; i++) {
-        p->channels[i].volume = 127;
-        p->channels[i].expression = 127;
-        p->channels[i].pitch_bend = 0;
-        p->channels[i].pan = 0;
-        p->channels[i].voices = 255;
-        p->channels[i].is_drums = 0;
-    }
-    p->channels[9].is_drums = 1;
-    p->inactive = 0;
-    p->n_active_voices = 0;
-    for (uint32_t i = 0; i < 255; i++) {
-        p->voices[i].next = i + 1;
-    }
-    p->clip_count = 0;
-}
 void mdv_channel_set_drums (MDV_Player* p, uint8_t channel, int is_drums) {
     if (channel < 16)
         p->channels[channel].is_drums = is_drums;
@@ -98,8 +81,10 @@ MDV_Player* mdv_new_player () {
     init_tables();
     debug_f = fopen("debug_out", "w");
     MDV_Player* player = (MDV_Player*)malloc(sizeof(MDV_Player));
-    mdv_reset_player(player);
     mdv_bank_init(&player->bank);
+    player->clip_count = 0;
+    MDV_Event reset = {MDV_COMMON, MDV_RESET, 0, 0};
+    mdv_play_event(player, &reset);
     return player;
 }
 void mdv_free_player (MDV_Player* player) {
@@ -229,6 +214,29 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
         case MDV_PITCH_BEND: {
             ch->pitch_bend =
                 (event->param2 << 7 | event->param1) - 8192;
+            break;
+        }
+        case MDV_COMMON: {
+            switch (event->channel) {  // actually common event type, not channel
+                case MDV_RESET: {
+                    for (uint32_t i = 0; i < 16; i++) {
+                        player->channels[i].volume = 127;
+                        player->channels[i].expression = 127;
+                        player->channels[i].pitch_bend = 0;
+                        player->channels[i].pan = 0;
+                        player->channels[i].voices = 255;
+                        player->channels[i].is_drums = 0;
+                    }
+                    player->channels[9].is_drums = 1;
+                    player->inactive = 0;
+                    player->n_active_voices = 0;
+                    for (uint32_t i = 0; i < 255; i++) {
+                        player->voices[i].next = i + 1;
+                    }
+                    break;
+                }
+                default: break;
+            }
             break;
         }
         case MDV_SET_TEMPO: {
