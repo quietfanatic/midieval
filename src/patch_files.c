@@ -327,7 +327,7 @@ void mdv_load_config (MDV_Player* player, const char* cfg) {
     line = 1;
     line_begin = dat;
 
-    uint32_t bank_num = 0;
+    uint32_t bank = 0;
     int drumset = 0;
 
     skip_ws(&p, end);
@@ -336,12 +336,12 @@ void mdv_load_config (MDV_Player* player, const char* cfg) {
             char* word = read_word(&p, end);
             if (cmp_strs(word, p - word, "bank", 4)) {
                 skip_ws(&p, end);
-                bank_num = read_i32(&p, end);
+                bank = read_i32(&p, end);
                 drumset = 0;
             }
             else if (cmp_strs(word, p - word, "drumset", 7)) {
                 skip_ws(&p, end);
-                bank_num = read_i32(&p, end);
+                bank = read_i32(&p, end);
                 drumset = 1;
             }
             else {
@@ -359,61 +359,47 @@ void mdv_load_config (MDV_Player* player, const char* cfg) {
             }
             skip_ws(&p, end);
             char* word = read_word(&p, end);
-            if (bank_num == 0) {
-                char* filename = malloc(prefix + (p - word) + 5);
-                memcpy(filename, cfg, prefix);
-                memcpy(filename + prefix, word, p - word);
-                memcpy(filename + prefix + (p - word), ".pat", 5);
-                MDV_Patch* patch = mdv_patch_load(filename);
-                free(filename);
+            char* filename = malloc(prefix + (p - word) + 5);
+            memcpy(filename, cfg, prefix);
+            memcpy(filename + prefix, word, p - word);
+            memcpy(filename + prefix + (p - word), ".pat", 5);
+            MDV_Patch* patch = mdv_patch_load(filename);
+            free(filename);
+            skip_ws(&p, end);
+            while (p != end && *p != '\n') {
+                char* option = read_word(&p, end);
+                uint32_t opt_len = p - option;
                 skip_ws(&p, end);
-                while (p != end && *p != '\n') {
-                    char* option = read_word(&p, end);
-                    uint32_t opt_len = p - option;
-                    skip_ws(&p, end);
-                    require_char(&p, end, '=');
-                    skip_ws(&p, end);
-                    if (cmp_strs(option, opt_len, "amp", 3)) {
-                        int32_t percent = read_i32(&p, end);
-                        patch->volume = patch->volume * percent / 100;
-                    }
-                    else if (cmp_strs(option, opt_len, "note", 4)) {
-                        int32_t note = read_i32(&p, end);
-                        if (note >= 0 && note <= 127) {
-                            patch->note = note;
-                        }
-                    }
-                    else if (cmp_strs(option, opt_len, "keep", 4)) {
-                        char* keep = read_word(&p, end);
-                        if (cmp_strs(keep, p - keep, "loop", 4)) {
-                            patch->keep_loop = 1;
-                        }
-                        else if (cmp_strs(keep, p - keep, "env", 3)) {
-                            patch->keep_envelope = 1;
-                        }
-                    }
-                    else {
-                        read_word(&p, end);
-                    }
-                    skip_ws(&p, end);
-                }
-                if (drumset)
-                    mdv_set_drum(player, 0, program, patch);
-                else
-                    mdv_set_patch(player, 0, program, patch);
-            }
-            else {
+                require_char(&p, end, '=');
                 skip_ws(&p, end);
-                while (p != end && *p != '\n') {
-                     // Just skip all the parameters
-                    read_word(&p, end);
-                    skip_ws(&p, end);
-                    require_char(&p, end, '=');
-                    skip_ws(&p, end);
-                    read_word(&p, end);
-                    skip_ws(&p, end);
+                if (cmp_strs(option, opt_len, "amp", 3)) {
+                    int32_t percent = read_i32(&p, end);
+                    patch->volume = patch->volume * percent / 100;
                 }
+                else if (cmp_strs(option, opt_len, "note", 4)) {
+                    int32_t note = read_i32(&p, end);
+                    if (note >= 0 && note <= 127) {
+                        patch->note = note;
+                    }
+                }
+                else if (cmp_strs(option, opt_len, "keep", 4)) {
+                    char* keep = read_word(&p, end);
+                    if (cmp_strs(keep, p - keep, "loop", 4)) {
+                        patch->keep_loop = 1;
+                    }
+                    else if (cmp_strs(keep, p - keep, "env", 3)) {
+                        patch->keep_envelope = 1;
+                    }
+                }
+                else {
+                    read_word(&p, end);
+                }
+                skip_ws(&p, end);
             }
+            if (drumset)
+                mdv_set_drum(player, bank, program, patch);
+            else
+                mdv_set_patch(player, bank, program, patch);
             line_break(&p, end);
         }
         else if (*p == '\n') {
