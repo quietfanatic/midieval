@@ -38,15 +38,14 @@ typedef struct Channel {
     uint16_t rpn;
     uint16_t pitch_bend_sensitivity;  // In cents, I guess
     int32_t pitch_bend;  // 16:16 in notes
-    uint8_t program;
     uint8_t volume;
     uint8_t expression;
     int8_t pan;
     uint8_t voices;
-     // Usually true for drum patches
-    uint8_t no_envelope;
-    uint8_t no_loop;
+    uint8_t no_envelope;  // Usually true for drum patches
+    uint8_t no_loop;  // ''
     uint8_t is_drums;
+    MDV_Patch* patch;  // Because bank changing doesn't affect this
 } Channel;
 
 struct MDV_Player {
@@ -185,7 +184,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                  // Decide which patch sample we're using
                 MDV_Patch* patch = ch->is_drums
                     ? player->drums[v->note]
-                    : player->patches[ch->program];
+                    : ch->patch;
                 if (patch) {
                     v->patch_volume = patch->volume;
                     v->do_envelope = !ch->is_drums || patch->keep_envelope;
@@ -262,16 +261,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
             break;
         }
         case MDV_PROGRAM_CHANGE: {
-             // Silence all voices in this channel.
-            uint8_t* np = &ch->voices;
-            while (*np != 255) {
-                Voice* v = &player->voices[*np];
-                *np = v->next;
-                v->next = player->inactive;
-                player->inactive = v - player->voices;
-                player->n_active_voices -= 1;
-            }
-            ch->program = event->param1;
+            ch->patch = player->patches[event->param1];
             break;
         }
         case MDV_PITCH_BEND: {
@@ -289,12 +279,12 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                         ch->rpn = 0x3fff;
                         ch->pitch_bend_sensitivity = 200;
                         ch->pitch_bend = 0;
-                        ch->program = 0;
                         ch->volume = 127;
                         ch->expression = 127;
                         ch->pan = 0;
                         ch->voices = 255;
                         ch->is_drums = 0;
+                        ch->patch = NULL;
                     }
                     player->channels[9].is_drums = 1;
                     player->inactive = 0;
