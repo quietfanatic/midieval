@@ -36,8 +36,8 @@ typedef struct Voice {
 typedef struct Channel {
      // TODO: a lot more controllers
     uint16_t rpn;
-    uint16_t pitch_bend_sensitivity;  // In cents, I guess
-    int32_t pitch_bend;  // 16:16 in notes
+    int32_t pitch_bend_sensitivity;  // 16:16 in half steps
+    int16_t pitch_bend;  // 0:14, as per midi spec
     uint8_t volume;
     uint8_t expression;
     int8_t pan;
@@ -219,8 +219,6 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                     v->patch_volume = patch->volume;
                     v->do_envelope = !ch->is_drums || patch->keep_envelope;
                     v->do_loop = !ch->is_drums || patch->keep_loop;
-                    if (patch->note >= 0)
-                        v->note = patch->note;
                     uint32_t freq = get_freq(v->note * 0x10000);
                     v->sample = &patch->samples[0];
                     for (uint8_t i = 0; i < patch->n_samples; i++) {
@@ -228,6 +226,13 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                             v->sample = &patch->samples[i];
                             break;
                         }
+                    }
+                    if (patch->note >= 0)
+                        v->note = patch->note;
+                    else if (v->sample->scale_factor != 1024) {
+                         // TODO: I guess this means that v->note needs to be 16-bit.
+                        v->note += (v->note - v->sample->scale_note)
+                                 * (v->sample->scale_factor - 1024) / 1024;
                     }
                 }
                 else {
@@ -244,14 +249,14 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 case MDV_DATA_ENTRY_MSB:
                     if (ch->rpn == 0x0000)
                         ch->pitch_bend_sensitivity =
-                            ch->pitch_bend_sensitivity % 100
-                          + event->param2 * 100;
+                            ch->pitch_bend_sensitivity % 0x10000
+                          + event->param2 * 0x10000;
                     break;
                 case MDV_DATA_ENTRY_LSB:
                     if (ch->rpn == 0x0000)
                         ch->pitch_bend_sensitivity =
-                            ch->pitch_bend_sensitivity / 100 * 100
-                          + (event->param2 <= 100 ? event->param2 : 100);
+                            ch->pitch_bend_sensitivity / 0x10000 * 0x10000
+                          + (event->param2 <= 99 ? event->param2 : 99) * 0x10000 / 100;
                     break;
                 case MDV_VOLUME:
                     ch->volume = event->param2;
@@ -275,7 +280,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                     break;
                 case MDV_ALL_CONTROLLERS_OFF:
                     ch->rpn = 0x3fff;
-                    ch->pitch_bend_sensitivity = 200;
+                    ch->pitch_bend_sensitivity = 0x20000;
                     ch->pitch_bend = 0;
                     ch->volume = 127;
                     ch->expression = 127;
@@ -300,11 +305,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
             break;
         }
         case MDV_PITCH_BEND: {
-             // Input ranges from -0x2000 to 0x1fff
-            int32_t pre_sensitivity =
-                (event->param2 << 7 | event->param1) - 0x2000;
-            ch->pitch_bend = pre_sensitivity * ch->pitch_bend_sensitivity
-                           * (0x10000 / 0x2000) / 100;
+            ch->pitch_bend = (event->param2 << 7 | event->param1) - 0x2000;
             break;
         }
         case MDV_COMMON: {
@@ -312,7 +313,7 @@ void mdv_play_event (MDV_Player* player, MDV_Event* event) {
                 case MDV_RESET: {
                     for (Channel* ch = player->channels; ch < player->channels + 16; ch++) {
                         ch->rpn = 0x3fff;
-                        ch->pitch_bend_sensitivity = 200;
+                        ch->pitch_bend_sensitivity = 0x20000;
                         ch->pitch_bend = 0;
                         ch->volume = 127;
                         ch->expression = 127;
@@ -488,8 +489,8 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                              * v->vibrato_sweep / (0x1000000 / 0x80)
                                              * sines[v->vibrato_phase / (0x1000000 / SINES_SIZE)] / 0x8000;
                              // Notes are on a logarithmic scale, so we add instead of multiplying
-                            uint32_t note = v->note * 0x10000
-                                          + ch->pitch_bend
+                            uint32_t note = (int64_t)v->note * 0x10000
+                                          + (int64_t)ch->pitch_bend * ch->pitch_bend_sensitivity / 0x2000
                                           + vibrato * 4;  // Range over a whole step
                             v->sample_inc = v->sample->sample_inc
                                           * get_freq(note) / v->sample->root_freq;

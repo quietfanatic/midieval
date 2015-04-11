@@ -50,6 +50,13 @@ static uint8_t* read_size (FILE* f, uint32_t size) {
     }
     return data;
 }
+static void read_copy (FILE* f, uint32_t size, uint8_t* dest) {
+    int got = fread(dest, 1, size, f);
+    if (got != size) {
+        printf("File too short.\n");
+        exit(1);
+    }
+}
 
 static void skip (FILE* f, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) {
@@ -99,7 +106,8 @@ MDV_Patch* mdv_patch_load (const char* filename) {
         printf("Instrument ID (?) was not 0x0000 in %s\n", filename);
         goto fail;
     }
-    skip(f, 16);  // Instrument name
+    char name [16];
+    read_copy(f, 16, name);
     skip(f, 4);  // Instrument size
     if (read_u8(f) != 1) {
         printf("Instrument has too many layers (?) in %s\n", filename);
@@ -122,7 +130,8 @@ MDV_Patch* mdv_patch_load (const char* filename) {
         pat->samples[i].data = NULL;
     }
     for (uint8_t i = 0; i < pat->n_samples; i++) {
-        skip(f, 7);  // Wave name
+        char wave_name [7];
+        read_copy(f, 7, wave_name);
         uint8_t fractions = read_u8(f);
         pat->samples[i].data_size = read_u32(f) / 2;
         pat->samples[i].loop_start = read_u32(f) * 0x100000000LL
@@ -167,7 +176,8 @@ MDV_Patch* mdv_patch_load (const char* filename) {
         pat->samples[i].vibrato_depth = read_u8(f);
 
         uint8_t sampling_modes = read_u8(f);
-        skip(f, 4);  // Scale(?) stuff
+        pat->samples[i].scale_note = read_u16(f);
+        pat->samples[i].scale_factor = read_u16(f);
         skip(f, 36);  // Reserved
         pat->samples[i].data = (int16_t*)read_size(f, pat->samples[i].data_size * 2);
         if (!(sampling_modes & BITS16)) {
