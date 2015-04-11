@@ -50,7 +50,7 @@ static uint8_t* read_size (FILE* f, uint32_t size) {
     }
     return data;
 }
-static void read_copy (FILE* f, uint32_t size, uint8_t* dest) {
+static void read_copy (FILE* f, uint32_t size, char* dest) {
     int got = fread(dest, 1, size, f);
     if (got != size) {
         printf("File too short.\n");
