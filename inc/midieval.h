@@ -175,6 +175,7 @@ typedef struct MDV_Sample {
     uint8_t pan;
     uint8_t loop;
     uint8_t pingpong;
+    uint8_t sustain;
     uint16_t scale_note;  // TODO: this doesn't need to be 16, does it?
     uint16_t scale_factor;
      // 32:32

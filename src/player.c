@@ -437,7 +437,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                     }
                                     else {
                                         v->envelope_value = target;
-                                        if (v->envelope_phase != 2) {
+                                        if (v->envelope_phase != 2 || !v->sample->sustain) {
                                             v->envelope_phase += 1;
                                         }
                                     }
@@ -451,7 +451,7 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                                     }
                                     else {
                                         v->envelope_value = target;
-                                        if (v->envelope_phase != 2) {
+                                        if (v->envelope_phase != 2 || !v->sample->sustain) {
                                             v->envelope_phase += 1;
                                         }
                                     }
@@ -535,7 +535,9 @@ void mdv_get_audio (MDV_Player* player, uint8_t* buf_, int len) {
                         }
                     }
                 }
-                else {  // No patch, do a square wave!
+                else if (!ch->is_drums) {  // No patch, do a square wave!
+                    if (v->envelope_phase >= 3)
+                        goto delete_voice;
                     for (int i = 0; i < chunk_length; i++) {
                          // Loop
                         v->sample_pos %= 0x100000000LL;

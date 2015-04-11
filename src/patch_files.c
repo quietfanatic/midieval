@@ -191,6 +191,7 @@ MDV_Patch* mdv_patch_load (const char* filename) {
         }
         pat->samples[i].loop = !!(sampling_modes & LOOPING);
         pat->samples[i].pingpong = !!(sampling_modes & PINGPONG);
+        pat->samples[i].sustain = !!(sampling_modes & SUSTAIN);
         if (sampling_modes & REVERSE) {
             printf("reverse samples NYI in %s\n", filename);
             goto fail;
